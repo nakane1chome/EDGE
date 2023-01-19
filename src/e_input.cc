@@ -42,14 +42,10 @@
 #include "r_misc.h"
 #include "z_zone.h"
 
-
-
 extern bool CON_Responder(event_t *ev);
 extern bool   M_Responder(event_t *ev);
 extern bool   G_Responder(event_t *ev);
-
 extern int I_JoyGetAxis(int n);
-
 
 //
 // EVENT HANDLING
@@ -63,108 +59,21 @@ static event_t events[MAXEVENTS];
 static int eventhead;
 static int eventtail;
 
-bool bJoystickActive, bKeyboardActive, bMouseActive;
-
 //
 // controls (have defaults) 
-// 
-int key_right;
-int key_left;
-int key_lookup;
-int key_lookdown;
-int key_lookcenter;
-
-// -ES- 1999/03/28 Zoom Key
-int key_zoom;
-
-// -CA- 2015/5/29 Fog Key (will replace with DDF commands later)
-int key_fog; //bool   gp
-
-int key_up;
-int key_down;
-int key_strafeleft;
-int key_straferight;
-int key_fire;
-int key_use;
-int key_strafe;
-int key_speed;
-int key_autorun;
-int key_nextweapon;
-int key_prevweapon;
-int key_map;
-int key_180;
-int key_talk;
-int key_console;
-int key_mlook;
-int key_secondatk;
-int key_reload;
-int key_action1;
-int key_action2;
-int key_action3;
-int key_action4;
-
-
-// -MH- 1998/07/10 Flying keys
-int key_flyup;
-int key_flydown;
-
-int key_weapons[10];
-
-#define MAXPLMOVE  (forwardmove[1])
-
-static int forwardmove[2] = { 25, 50 };
-static int sidemove[2] = { 24, 40 };
-static int upwardmove[2] = { 20, 30 };
-
-static int angleturn[3] = { 640, 1280, 320 };  // + slow turn 
-static int mlookturn[3] = { 400,  800, 200 };
-
-#define SLOWTURNTICS    6
-
-#define NUMKEYS         512
-
-#define GK_DOWN  0x01
-#define GK_UP    0x02
-
-///this equiv to gamecontrol in Legacy?
-static byte gamekeydown[NUMKEYS];
-static byte gamekeydown2[NUMKEYS]; //2nd-Player stuff.
-
-static int turnheld;   // for accelerative turning 
-static int mlookheld;  // for accelerative mlooking 
-
-
-//-------------------------------------------
-// -KM-  1998/09/01 Analogue binding
-// -ACB- 1998/09/06 Two-stage turning switch
 //
-int mouse_xaxis;
-int mouse_yaxis;
+// Options
+input_options_t input_options;
 
-int mouse_xsens;
-int mouse_ysens;
-
-int joy_axis[6] = { 0, 0, 0, 0, 0, 0 };
-
-static int joy_last_raw[6];
-
-static int mouse_ss_hack = 0;
-
-// The last one is ignored (AXIS_DISABLE)
-static float ball_deltas[6] = { 0, 0, 0, 0, 0, 0 };
-static float  joy_forces[6] = { 0, 0, 0, 0, 0, 0 };
-
+// Export ??
 cvar_c joy_dead;
 cvar_c joy_peak;
 cvar_c joy_tuning;
-
 cvar_c in_running;
 cvar_c in_stageturn;
 cvar_c mouse_filter;
-
 cvar_c debug_mouse;
 cvar_c debug_joyaxis;
-
 // Speed controls
 int var_turnspeed;
 int var_mlookspeed;
@@ -172,16 +81,44 @@ int var_forwardspeed;
 int var_sidespeed;
 int var_flyspeed;
 
+#define MAXPLMOVE  (forwardmove[1])
 
-static float sensitivities[16] =
+static const int DEFAULT_forwardmove[2] = { 25, 50 };
+static const int DEFAULT_sidemove[2] = { 24, 40 };
+static const int DEFAULT_upwardmove[2] = { 20, 30 };
+static const int ANGLETURN[3] = { 640, 1280, 320 };  // + slow turn 
+static const int MLOOKTURN[3] = { 400,  800, 200 };
+
+#define SLOWTURNTICS    6
+#define NUMKEYS         512
+#define GK_DOWN  0x01
+#define GK_UP    0x02
+
+//-------------------------------------------
+// -KM-  1998/09/01 Analogue binding
+// -ACB- 1998/09/06 Two-stage turning switch
+//
+static bool bJoystickActive, bKeyboardActive, bMouseActive;
+static int forwardmove[2] = { 25, 50 };
+static int sidemove[2] = { 24, 40 };
+static int upwardmove[2] = { 20, 30 };
+static byte gamekeydown[NUMKEYS];
+static byte gamekeydown2[NUMKEYS]; //2nd-Player stuff.
+static int turnheld;   // for accelerative turning 
+static int mlookheld;  // for accelerative mlooking 
+static int   joy_last_raw[6];
+static int   mouse_ss_hack = 0;
+static float ball_deltas[6] = { 0, 0, 0, 0, 0, 0 };
+static float joy_forces[6] = { 0, 0, 0, 0, 0, 0 };
+
+static const float SENSITIVITIES[16] =
 {
 	0.10, 0.25, 0.35, 0.50,
 	0.75, 1.00, 1.56, 2.21,
 	3.13, 4.42, 6.26, 8.84,
 	12.5, 17.7, 25.0, 35.4
 };
-
-static float speed_factors[12] =
+static const float SPEED_FACTORS[12] =
 {
 	0.15, 0.25, 0.33, 0.42,
 	0.50, 0.66, 0.83, 1.00,
@@ -189,7 +126,7 @@ static float speed_factors[12] =
 };
 
 
-float JoyAxisFromRaw(int raw)
+static float JoyAxisFromRaw(int raw)
 {
 	SYS_ASSERT(abs(raw) <= 32768);
 
@@ -219,7 +156,7 @@ float JoyAxisFromRaw(int raw)
 
 static void UpdateJoyAxis(int n)
 {
-	if (joy_axis[n] == AXIS_DISABLE)
+	if (input_options.joy_axis[n] == AXIS_DISABLE)
 		return;
 
 	int raw = I_JoyGetAxis(n);
@@ -233,7 +170,7 @@ static void UpdateJoyAxis(int n)
 	float force = JoyAxisFromRaw(cooked);
 
 	// perform inversion
-	if ((joy_axis[n] + 1) & 1)
+	if ((input_options.joy_axis[n] + 1) & 1)
 		force = -force;
 
 	if (debug_joyaxis.d == n + 1)
@@ -241,7 +178,7 @@ static void UpdateJoyAxis(int n)
 		I_Printf("Axis%d : raw %+05d --> %+7.3f\n", n + 1, raw, force);
 	}
 
-	int axis = (joy_axis[n] + 1) >> 1;
+	int axis = (input_options.joy_axis[n] + 1) >> 1;
 
 	joy_forces[axis] += force;
 }
@@ -291,12 +228,12 @@ static void UpdateForces(void)
 
 	// ---Keyboard---
 
-	AddKeyForce(AXIS_TURN, key_right, key_left);
-	AddKeyForce(AXIS_MLOOK, key_lookup, key_lookdown);
-	AddKeyForce(AXIS_FORWARD, key_up, key_down);
+	AddKeyForce(AXIS_TURN, input_options.key_right, input_options.key_left);
+	AddKeyForce(AXIS_MLOOK, input_options.key_lookup, input_options.key_lookdown);
+	AddKeyForce(AXIS_FORWARD, input_options.key_up, input_options.key_down);
 	// -MH- 1998/08/18 Fly down
-	AddKeyForce(AXIS_FLY, key_flyup, key_flydown);
-	AddKeyForce(AXIS_STRAFE, key_straferight, key_strafeleft);
+	AddKeyForce(AXIS_FLY, input_options.key_flyup, input_options.key_flydown);
+	AddKeyForce(AXIS_STRAFE, input_options.key_straferight, input_options.key_strafeleft);
 
 	// ---Joystick---
 
@@ -380,8 +317,8 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 
 	Z_Clear(cmd, ticcmd_t, 1);
 
-	bool strafe = E_IsKeyPressed(key_strafe);
-	int  speed = E_IsKeyPressed(key_speed) ? 1 : 0;
+	bool strafe = E_IsKeyPressed(input_options.key_strafe);
+	int  speed = E_IsKeyPressed(input_options.key_speed) ? 1 : 0;
 
 
 	if (in_running.d)
@@ -429,12 +366,12 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 	// Turning
 	if (!strafe)
 	{
-		float turn = angleturn[t_speed] * joy_forces[AXIS_TURN];
+		float turn = ANGLETURN[t_speed] * joy_forces[AXIS_TURN];
 
-		turn *= speed_factors[var_turnspeed];
+		turn *= SPEED_FACTORS[var_turnspeed];
 
 		// -ACB- 1998/09/06 Angle Turn Speed Control
-		turn += angleturn[t_speed] * ball_deltas[AXIS_TURN] / 64.0;
+		turn += ANGLETURN[t_speed] * ball_deltas[AXIS_TURN] / 64.0;
 
 		cmd->angleturn = I_ROUND(turn);
 	}
@@ -442,11 +379,11 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 	// MLook
 	{
 		// -ACB- 1998/07/02 Use VertAngle for Look/up down.
-		float mlook = mlookturn[m_speed] * joy_forces[AXIS_MLOOK];
+		float mlook = MLOOKTURN[m_speed] * joy_forces[AXIS_MLOOK];
 
-		mlook *= speed_factors[var_mlookspeed];
+		mlook *= SPEED_FACTORS[var_mlookspeed];
 
-		mlook += mlookturn[m_speed] * ball_deltas[AXIS_MLOOK] / 64.0;
+		mlook += MLOOKTURN[m_speed] * ball_deltas[AXIS_MLOOK] / 64.0;
 
 		cmd->mlookturn = I_ROUND(mlook);
 	}
@@ -457,7 +394,7 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 	{
 		float forward = forwardmove[speed] * joy_forces[AXIS_FORWARD];
 
-		forward *= speed_factors[var_forwardspeed];
+		forward *= SPEED_FACTORS[var_forwardspeed];
 
 		// -ACB- 1998/09/06 Forward Move Speed Control
 		forward += forwardmove[speed] * ball_deltas[AXIS_FORWARD] / 64.0;
@@ -474,7 +411,7 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 		if (strafe)
 			side += sidemove[speed] * joy_forces[AXIS_TURN];
 
-		side *= speed_factors[var_sidespeed];
+		side *= SPEED_FACTORS[var_sidespeed];
 
 		// -ACB- 1998/09/06 Side Move Speed Control
 		side += sidemove[speed] * ball_deltas[AXIS_STRAFE] / 64.0;
@@ -491,7 +428,7 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 	{
 		float upward = upwardmove[speed] * joy_forces[AXIS_FLY];
 
-		upward *= speed_factors[var_flyspeed];
+		upward *= SPEED_FACTORS[var_flyspeed];
 
 		upward += upwardmove[speed] * ball_deltas[AXIS_FLY] / 64.0;
 
@@ -503,38 +440,38 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 
 	// ---Buttons---
 
-	if (E_IsKeyPressed(key_fire))
+	if (E_IsKeyPressed(input_options.key_fire))
 		cmd->buttons |= BT_ATTACK;
 
-	if (E_IsKeyPressed(key_use))
+	if (E_IsKeyPressed(input_options.key_use))
 		cmd->buttons |= BT_USE;
 
-	if (E_IsKeyPressed(key_secondatk))
+	if (E_IsKeyPressed(input_options.key_secondatk))
 		cmd->extbuttons |= EBT_SECONDATK;
 
-	if (E_IsKeyPressed(key_reload))
+	if (E_IsKeyPressed(input_options.key_reload))
 		cmd->extbuttons |= EBT_RELOAD;
 
-	if (E_IsKeyPressed(key_action1))
+	if (E_IsKeyPressed(input_options.key_action1))
 		cmd->extbuttons |= EBT_ACTION1;
 
-	if (E_IsKeyPressed(key_action2))
+	if (E_IsKeyPressed(input_options.key_action2))
 		cmd->extbuttons |= EBT_ACTION2;
 
-	if (E_IsKeyPressed(key_action3))
+	if (E_IsKeyPressed(input_options.key_action3))
 		cmd->extbuttons |= EBT_ACTION3;
 
-	if (E_IsKeyPressed(key_action4))
+	if (E_IsKeyPressed(input_options.key_action4))
 		cmd->extbuttons |= EBT_ACTION4;
 
 	// -ACB- 1998/07/02 Use CENTER flag to center the vertical look.
-	if (E_IsKeyPressed(key_lookcenter))
+	if (E_IsKeyPressed(input_options.key_lookcenter))
 		cmd->extbuttons |= EBT_CENTER;
 
 	// -KM- 1998/11/25 Weapon change key
 	for (int w = 0; w < 10; w++)
 	{
-		if (E_IsKeyPressed(key_weapons[w]))
+		if (E_IsKeyPressed(input_options.key_weapons[w]))
 		{
 			cmd->buttons |= BT_CHANGE;
 			cmd->buttons |= w << BT_WEAPONSHIFT;
@@ -542,19 +479,19 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 		}
 	}
 
-	if (E_IsKeyPressed(key_nextweapon))
+	if (E_IsKeyPressed(input_options.key_nextweapon))
 	{
 		cmd->buttons |= BT_CHANGE;
 		cmd->buttons |= (BT_NEXT_WEAPON << BT_WEAPONSHIFT);
 	}
-	else if (E_IsKeyPressed(key_prevweapon))
+	else if (E_IsKeyPressed(input_options.key_prevweapon))
 	{
 		cmd->buttons |= BT_CHANGE;
 		cmd->buttons |= (BT_PREV_WEAPON << BT_WEAPONSHIFT);
 	}
 
 	// You have to release the 180 deg turn key before you can press it again
-	if (E_IsKeyPressed(key_180))
+	if (E_IsKeyPressed(input_options.key_180))
 	{
 		if (allow180)
 			cmd->angleturn ^= (s16_t)0x8000;
@@ -565,7 +502,7 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 		allow180 = true;
 
 	// -ES- 1999/03/28 Zoom Key
-	if (E_IsKeyPressed(key_zoom))
+	if (E_IsKeyPressed(input_options.key_zoom))
 	{
 		if (allowzoom)
 		{
@@ -577,7 +514,7 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 		allowzoom = true;
 
 	// -AJA- 2000/04/14: Autorun toggle
-	if (E_IsKeyPressed(key_autorun))
+	if (E_IsKeyPressed(input_options.key_autorun))
 	{
 		if (allowautorun)
 		{
@@ -607,8 +544,8 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 
 	Z_Clear(cmd, ticcmd_t, 1);
 
-	bool strafe = E_IsKeyPressed(key_strafe);
-	int  speed = E_IsKeyPressed(key_speed) ? 1 : 0;
+	bool strafe = E_IsKeyPressed(input_options.key_strafe);
+	int  speed = E_IsKeyPressed(input_options.key_speed) ? 1 : 0;
 
 
 	if (in_running.d)
@@ -645,12 +582,12 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 	// Turning
 	if (!strafe)
 	{
-		float turn = angleturn[t_speed] * joy_forces[AXIS_TURN];
+		float turn = ANGLETURN[t_speed] * joy_forces[AXIS_TURN];
 
-		turn *= speed_factors[var_turnspeed];
+		turn *= SPEED_FACTORS[var_turnspeed];
 
 		// -ACB- 1998/09/06 Angle Turn Speed Control
-		turn += angleturn[t_speed] * joy_forces[AXIS_TURN] / 64.0;
+		turn += ANGLETURN[t_speed] * joy_forces[AXIS_TURN] / 64.0;
 
 		cmd->angleturn = I_ROUND(turn);
 	}
@@ -660,11 +597,11 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 	{
 
 		// -ACB- 1998/07/02 Use VertAngle for Look/up down.
-		float mlook = mlookturn[m_speed] * joy_forces[AXIS_MLOOK];
+		float mlook = MLOOKTURN[m_speed] * joy_forces[AXIS_MLOOK];
 
-		mlook *= speed_factors[var_mlookspeed];
+		mlook *= SPEED_FACTORS[var_mlookspeed];
 
-		mlook += mlookturn[m_speed] * joy_forces[AXIS_MLOOK] / 64.0;
+		mlook += MLOOKTURN[m_speed] * joy_forces[AXIS_MLOOK] / 64.0;
 
 		cmd->mlookturn = I_ROUND(mlook);
 
@@ -675,7 +612,7 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 	{
 		float forward = forwardmove[speed] * joy_forces[AXIS_FORWARD];
 
-		forward *= speed_factors[var_forwardspeed];
+		forward *= SPEED_FACTORS[var_forwardspeed];
 
 		// -ACB- 1998/09/06 Forward Move Speed Control
 		forward += forwardmove[speed] * joy_forces[AXIS_FORWARD] / 64.0;
@@ -692,7 +629,7 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 		if (strafe)
 			side += sidemove[speed] * joy_forces[AXIS_TURN];
 
-		side *= speed_factors[var_sidespeed];
+		side *= SPEED_FACTORS[var_sidespeed];
 
 		// -ACB- 1998/09/06 Side Move Speed Control
 		//side += sidemove[speed] * ball_deltas[AXIS_STRAFE] / 64.0;
@@ -709,7 +646,7 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 	{
 		float upward = upwardmove[speed] * joy_forces[AXIS_FLY];
 
-		upward *= speed_factors[var_flyspeed];
+		upward *= SPEED_FACTORS[var_flyspeed];
 
 		upward += upwardmove[speed] * joy_forces[AXIS_FLY] / 64.0;
 
@@ -732,7 +669,7 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 		cmd->buttons |= BT_USE;
 
 	// -AJA- 2000/04/14: Autorun toggle
-	if (E_IsKeyPressed(key_autorun))
+	if (E_IsKeyPressed(input_options.key_autorun))
 	{
 		if (allowautorun)
 		{
@@ -798,26 +735,26 @@ bool INP_Responder(event_t * ev)
 		float dy = ev->data3;
 
 		// perform inversion
-		if ((mouse_xaxis + 1) & 1) dx = -dx;
-		if ((mouse_yaxis + 1) & 1) dy = -dy;
+		if ((input_options.mouse_xaxis + 1) & 1) dx = -dx;
+		if ((input_options.mouse_yaxis + 1) & 1) dy = -dy;
 
-		dx *= sensitivities[mouse_xsens];
-		dy *= sensitivities[mouse_ysens];
+		dx *= SENSITIVITIES[input_options.mouse_xsens];
+		dy *= SENSITIVITIES[input_options.mouse_ysens];
 
 		if (debug_mouse.d)
 			I_Printf("Mouse %+04d %+04d --> %+7.2f %+7.2f\n",
 				ev->data2, ev->data3, dx, dy);
 
 		// -AJA- 1999/07/27: Mlook key like quake's.
-		if (E_IsKeyPressed(key_mlook))
+		if (E_IsKeyPressed(input_options.key_mlook))
 		{
 			ball_deltas[AXIS_TURN] += dx;
 			ball_deltas[AXIS_MLOOK] += dy;
 		}
 		else
 		{
-			ball_deltas[(mouse_xaxis + 1) >> 1] += dx;
-			ball_deltas[(mouse_yaxis + 1) >> 1] += dy;
+			ball_deltas[(input_options.mouse_xaxis + 1) >> 1] += dx;
+			ball_deltas[(input_options.mouse_yaxis + 1) >> 1] += dy;
 		}
 
 		return true;  // eat events
