@@ -141,7 +141,7 @@ static int menu_crosshair;  // temp hack
 static int menu_crosshair2;  /// love haxxx
 extern int monitor_size;
 
-extern int joystick_device;
+extern int joystick_devices[2];
 
 extern bool heretic_mode;
 
@@ -566,13 +566,14 @@ static optmenuitem_t analogueoptions[] =
 	//	{OPT_Slider,   "Mouse Acceleration", NULL, 20,  &mouse_accel, NULL, NULL},
 		{OPT_Boolean,  "Mouse Filtering",    YesNo, 0,  &mouse_filter, NULL, NULL},
 		{OPT_Plain,    "",                   NULL, 0,  NULL, NULL, NULL},
-		{OPT_Switch,   "Joystick Device", JoyDevs, 7,  &joystick_device, NULL, NULL},
 		{OPT_Switch,   "First Axis",         Axis, 11, &joy_axis[0], NULL, NULL},
 		{OPT_Switch,   "Second Axis",        Axis, 11, &joy_axis[1], NULL, NULL},
 		{OPT_Switch,   "Third Axis",         Axis, 11, &joy_axis[2], NULL, NULL},
 		{OPT_Switch,   "Fourth Axis",        Axis, 11, &joy_axis[3], NULL, NULL},
 		{OPT_Switch,   "Fifth Axis",         Axis, 11, &joy_axis[4], NULL, NULL},
 		{OPT_Switch,   "Sixth Axis",         Axis, 11, &joy_axis[5], NULL, NULL},
+		{OPT_Switch,   "Joystick Device 1", JoyDevs, 7,  &joystick_devices[0], NULL, NULL},
+		{OPT_Switch,   "Joystick Device 2", JoyDevs, 7,  &joystick_devices[1], NULL, NULL},
 
 		{OPT_Plain,    "",                   NULL, 0,  NULL, NULL, NULL},
 		{OPT_Slider,   "Turning Speed",      NULL, 12, &var_turnspeed,    NULL, NULL},
