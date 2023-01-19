@@ -559,21 +559,21 @@ static menuinfo_t hereticres_optmenu =
 //
 static optmenuitem_t analogueoptions[] =
 {
-	{OPT_Switch,   "Mouse X Axis",       Axis, 11, &mouse_xaxis, NULL, NULL},
-	{OPT_Switch,   "Mouse Y Axis",       Axis, 11, &mouse_yaxis, NULL, NULL},
-	{OPT_Slider,   "X Sensitivity",      NULL, 16, &mouse_xsens, NULL, NULL},
-	{OPT_Slider,   "Y Sensitivity",      NULL, 16, &mouse_ysens, NULL, NULL},
+	{OPT_Switch,   "Mouse X Axis",       Axis, 11, &input_options.mouse_xaxis, NULL, NULL},
+	{OPT_Switch,   "Mouse Y Axis",       Axis, 11, &input_options.mouse_yaxis, NULL, NULL},
+	{OPT_Slider,   "X Sensitivity",      NULL, 16, &input_options.mouse_xsens, NULL, NULL},
+	{OPT_Slider,   "Y Sensitivity",      NULL, 16, &input_options.mouse_ysens, NULL, NULL},
 	//	{OPT_Slider,   "Mouse Acceleration", NULL, 20,  &mouse_accel, NULL, NULL},
 		{OPT_Boolean,  "Mouse Filtering",    YesNo, 0,  &mouse_filter, NULL, NULL},
 		{OPT_Plain,    "",                   NULL, 0,  NULL, NULL, NULL},
-		{OPT_Switch,   "First Axis",         Axis, 11, &joy_axis[0], NULL, NULL},
-		{OPT_Switch,   "Second Axis",        Axis, 11, &joy_axis[1], NULL, NULL},
-		{OPT_Switch,   "Third Axis",         Axis, 11, &joy_axis[2], NULL, NULL},
-		{OPT_Switch,   "Fourth Axis",        Axis, 11, &joy_axis[3], NULL, NULL},
-		{OPT_Switch,   "Fifth Axis",         Axis, 11, &joy_axis[4], NULL, NULL},
-		{OPT_Switch,   "Sixth Axis",         Axis, 11, &joy_axis[5], NULL, NULL},
 		{OPT_Switch,   "Joystick Device 1", JoyDevs, 7,  &joystick_devices[0], NULL, NULL},
 		{OPT_Switch,   "Joystick Device 2", JoyDevs, 7,  &joystick_devices[1], NULL, NULL},
+		{OPT_Switch,   "First Axis",         Axis, 11, &input_options.joy_axis[0], NULL, NULL},
+		{OPT_Switch,   "Second Axis",        Axis, 11, &input_options.joy_axis[1], NULL, NULL},
+		{OPT_Switch,   "Third Axis",         Axis, 11, &input_options.joy_axis[2], NULL, NULL},
+		{OPT_Switch,   "Fourth Axis",        Axis, 11, &input_options.joy_axis[3], NULL, NULL},
+		{OPT_Switch,   "Fifth Axis",         Axis, 11, &input_options.joy_axis[4], NULL, NULL},
+		{OPT_Switch,   "Sixth Axis",         Axis, 11, &input_options.joy_axis[5], NULL, NULL},
 
 		{OPT_Plain,    "",                   NULL, 0,  NULL, NULL, NULL},
 		{OPT_Slider,   "Turning Speed",      NULL, 12, &var_turnspeed,    NULL, NULL},
@@ -715,17 +715,17 @@ static menuinfo_t hereticgameplay_optmenu =
 //
 static optmenuitem_t move_keyconfig[] =
 {
-	{OPT_KeyConfig, "Walk Forward",   NULL, 0, &key_up, NULL, NULL},
-	{OPT_KeyConfig, "Walk Backwards", NULL, 0, &key_down, NULL, NULL},
+	{OPT_KeyConfig, "Walk Forward",   NULL, 0, &input_options.key_up, NULL, NULL},
+	{OPT_KeyConfig, "Walk Backwards", NULL, 0, &input_options.key_down, NULL, NULL},
 	{OPT_Plain,      "",              NULL, 0, NULL, NULL, NULL},
-	{OPT_KeyConfig, "Strafe Left",    NULL, 0, &key_strafeleft, NULL, NULL},
-	{OPT_KeyConfig, "Strafe Right",   NULL, 0, &key_straferight, NULL, NULL},
+	{OPT_KeyConfig, "Strafe Left",    NULL, 0, &input_options.key_strafeleft, NULL, NULL},
+	{OPT_KeyConfig, "Strafe Right",   NULL, 0, &input_options.key_straferight, NULL, NULL},
 	{OPT_Plain,      "",              NULL, 0, NULL, NULL, NULL},
-	{OPT_KeyConfig, "Turn Left",      NULL, 0, &key_left, NULL, NULL},
-	{OPT_KeyConfig, "Turn Right",     NULL, 0, &key_right, NULL, NULL},
+	{OPT_KeyConfig, "Turn Left",      NULL, 0, &input_options.key_left, NULL, NULL},
+	{OPT_KeyConfig, "Turn Right",     NULL, 0, &input_options.key_right, NULL, NULL},
 	{OPT_Plain,      "",              NULL, 0, NULL, NULL, NULL},
-	{OPT_KeyConfig, "Up / Jump",      NULL, 0, &key_flyup, NULL, NULL},
-	{OPT_KeyConfig, "Down / Crouch",  NULL, 0, &key_flydown, NULL, NULL},
+	{OPT_KeyConfig, "Up / Jump",      NULL, 0, &input_options.key_flyup, NULL, NULL},
+	{OPT_KeyConfig, "Down / Crouch",  NULL, 0, &input_options.key_flydown, NULL, NULL},
 };
 
 static menuinfo_t movement_optmenu =
@@ -749,19 +749,19 @@ static menuinfo_t hereticmovement_optmenu =
 //
 static optmenuitem_t attack_keyconfig[] =
 {
-	{OPT_KeyConfig, "Primary Attack",   NULL, 0, &key_fire, NULL, NULL},
-	{OPT_KeyConfig, "Secondary Attack", NULL, 0, &key_secondatk, NULL, NULL},
-	{OPT_KeyConfig, "Next Weapon",      NULL, 0, &key_nextweapon, NULL, NULL},
-	{OPT_KeyConfig, "Previous Weapon",  NULL, 0, &key_prevweapon, NULL, NULL},
-	{OPT_KeyConfig, "Weapon Reload",    NULL, 0, &key_reload, NULL, NULL},
+	{OPT_KeyConfig, "Primary Attack",   NULL, 0, &input_options.key_fire, NULL, NULL},
+	{OPT_KeyConfig, "Secondary Attack", NULL, 0, &input_options.key_secondatk, NULL, NULL},
+	{OPT_KeyConfig, "Next Weapon",      NULL, 0, &input_options.key_nextweapon, NULL, NULL},
+	{OPT_KeyConfig, "Previous Weapon",  NULL, 0, &input_options.key_prevweapon, NULL, NULL},
+	{OPT_KeyConfig, "Weapon Reload",    NULL, 0, &input_options.key_reload, NULL, NULL},
 	{OPT_Plain,     "",                 NULL, 0, NULL, NULL, NULL },
-	{OPT_KeyConfig, "Use Item",         NULL, 0, &key_use, NULL, NULL },
+	{OPT_KeyConfig, "Use Item",         NULL, 0, &input_options.key_use, NULL, NULL },
 	{OPT_Plain,     "",                 NULL, 0, NULL, NULL, NULL},
-	{OPT_KeyConfig, "Look Up",          NULL, 0, &key_lookup, NULL, NULL},
-	{OPT_KeyConfig, "Look Down",        NULL, 0, &key_lookdown, NULL, NULL},
-	{OPT_KeyConfig, "Center View",      NULL, 0, &key_lookcenter, NULL, NULL},
-	{OPT_KeyConfig, "Mouse Look",       NULL, 0, &key_mlook, NULL, NULL},
-	{OPT_KeyConfig, "Zoom in/out",      NULL, 0, &key_zoom, NULL, NULL},
+	{OPT_KeyConfig, "Look Up",          NULL, 0, &input_options.key_lookup, NULL, NULL},
+	{OPT_KeyConfig, "Look Down",        NULL, 0, &input_options.key_lookdown, NULL, NULL},
+	{OPT_KeyConfig, "Center View",      NULL, 0, &input_options.key_lookcenter, NULL, NULL},
+	{OPT_KeyConfig, "Mouse Look",       NULL, 0, &input_options.key_mlook, NULL, NULL},
+	{OPT_KeyConfig, "Zoom in/out",      NULL, 0, &input_options.key_zoom, NULL, NULL},
 };
 
 static menuinfo_t attack_optmenu =
@@ -783,20 +783,20 @@ static menuinfo_t hereticattack_optmenu =
 static optmenuitem_t other_keyconfig[] =
 {
 	{OPT_Plain,     "",                 NULL, 0, NULL, NULL, NULL },
-	{OPT_KeyConfig, "Strafe",           NULL, 0, &key_strafe, NULL, NULL},
-	{OPT_KeyConfig, "Run",              NULL, 0, &key_speed, NULL, NULL},
-	{OPT_KeyConfig, "Toggle Autorun",   NULL, 0, &key_autorun, NULL, NULL},
-	{OPT_KeyConfig, "180 degree turn",  NULL, 0, &key_180, NULL, NULL},
+	{OPT_KeyConfig, "Strafe",           NULL, 0, &input_options.key_strafe, NULL, NULL},
+	{OPT_KeyConfig, "Run",              NULL, 0, &input_options.key_speed, NULL, NULL},
+	{OPT_KeyConfig, "Toggle Autorun",   NULL, 0, &input_options.key_autorun, NULL, NULL},
+	{OPT_KeyConfig, "180 degree turn",  NULL, 0, &input_options.key_180, NULL, NULL},
 	{OPT_Plain,     "",                 NULL, 0, NULL, NULL, NULL},
 	{OPT_KeyConfig, "Map Toggle",       NULL, 0, &key_map, NULL, NULL},
 	{OPT_KeyConfig, "Console",          NULL, 0, &key_console, NULL, NULL},
 	{OPT_KeyConfig, "Pause",            NULL, 0, &key_pause, NULL, NULL},
-	{OPT_KeyConfig, "Action 1",         NULL, 0, &key_action1, NULL, NULL},
-	{OPT_KeyConfig, "Action 2",         NULL, 0, &key_action2, NULL, NULL},
-	{OPT_KeyConfig, "Action 3",         NULL, 0, &key_action3, NULL, NULL},
-	{OPT_KeyConfig, "Action 4",         NULL, 0, &key_action4, NULL, NULL},
+	{OPT_KeyConfig, "Action 1",         NULL, 0, &input_options.key_action1, NULL, NULL},
+	{OPT_KeyConfig, "Action 2",         NULL, 0, &input_options.key_action2, NULL, NULL},
+	{OPT_KeyConfig, "Action 3",         NULL, 0, &input_options.key_action3, NULL, NULL},
+	{OPT_KeyConfig, "Action 4",         NULL, 0, &input_options.key_action4, NULL, NULL},
 
-	///	{OPT_KeyConfig, "Multiplayer Talk", NULL, 0, &key_talk, NULL, NULL},
+	///	{OPT_KeyConfig, "Multiplayer Talk", NULL, 0, &input_options.key_talk, NULL, NULL},
 };
 
 static menuinfo_t otherkey_optmenu =
@@ -817,17 +817,17 @@ static menuinfo_t hereticotherkey_optmenu =
 //
 static optmenuitem_t weapon_keyconfig[] =
 {
-	{OPT_KeyConfig, "Weapon 1",  NULL, 0, &key_weapons[1], NULL, NULL},
-	{OPT_KeyConfig, "Weapon 2",  NULL, 0, &key_weapons[2], NULL, NULL},
-	{OPT_KeyConfig, "Weapon 3",  NULL, 0, &key_weapons[3], NULL, NULL},
-	{OPT_KeyConfig, "Weapon 4",  NULL, 0, &key_weapons[4], NULL, NULL},
-	{OPT_KeyConfig, "Weapon 5",  NULL, 0, &key_weapons[5], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 1",  NULL, 0, &input_options.key_weapons[1], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 2",  NULL, 0, &input_options.key_weapons[2], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 3",  NULL, 0, &input_options.key_weapons[3], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 4",  NULL, 0, &input_options.key_weapons[4], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 5",  NULL, 0, &input_options.key_weapons[5], NULL, NULL},
 	{OPT_Plain,     "",          NULL, 0, NULL, NULL, NULL},
-	{OPT_KeyConfig, "Weapon 6",  NULL, 0, &key_weapons[6], NULL, NULL},
-	{OPT_KeyConfig, "Weapon 7",  NULL, 0, &key_weapons[7], NULL, NULL},
-	{OPT_KeyConfig, "Weapon 8",  NULL, 0, &key_weapons[8], NULL, NULL},
-	{OPT_KeyConfig, "Weapon 9",  NULL, 0, &key_weapons[9], NULL, NULL},
-	{OPT_KeyConfig, "Weapon 0",  NULL, 0, &key_weapons[0], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 6",  NULL, 0, &input_options.key_weapons[6], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 7",  NULL, 0, &input_options.key_weapons[7], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 8",  NULL, 0, &input_options.key_weapons[8], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 9",  NULL, 0, &input_options.key_weapons[9], NULL, NULL},
+	{OPT_KeyConfig, "Weapon 0",  NULL, 0, &input_options.key_weapons[0], NULL, NULL},
 };
 
 static menuinfo_t weapon_optmenu =

@@ -170,10 +170,10 @@ static default_t defaults[] =
 
     // -KM- 1998/09/01 Useless mouse/joy stuff removed,
     //                 analogue binding added
-    {CFGT_Int,      "mouse_axis_x",      &mouse_xaxis,  CFGDEF_MOUSE_XAXIS},
-    {CFGT_Int,      "mouse_axis_y",      &mouse_yaxis,  CFGDEF_MOUSE_YAXIS},
-    {CFGT_Int,      "mouse_sens_x",      &mouse_xsens,  CFGDEF_MOUSESENSITIVITY},
-    {CFGT_Int,      "mouse_sens_y",      &mouse_ysens,  CFGDEF_MOUSESENSITIVITY},
+    {CFGT_Int,      "mouse_axis_x",      &input_options.mouse_xaxis,  CFGDEF_MOUSE_XAXIS},
+    {CFGT_Int,      "mouse_axis_y",      &input_options.mouse_yaxis,  CFGDEF_MOUSE_YAXIS},
+    {CFGT_Int,      "mouse_sens_x",      &input_options.mouse_xsens,  CFGDEF_MOUSESENSITIVITY},
+    {CFGT_Int,      "mouse_sens_y",      &input_options.mouse_ysens,  CFGDEF_MOUSESENSITIVITY},
 
     // -ACB- 1998/09/06 Two-stage turning & Speed controls added
     {CFGT_Int,      "var_turnspeed",     &var_turnspeed,    CFGDEF_TURNSPEED},
@@ -182,14 +182,14 @@ static default_t defaults[] =
     {CFGT_Int,      "var_sidespeed",     &var_sidespeed,    CFGDEF_SIDEMOVESPEED},
     {CFGT_Int,      "var_flyspeed",      &var_flyspeed,     CFGDEF_SIDEMOVESPEED},
 
-    {CFGT_Int,      "joy_axis1",         &joy_axis[0],    CFGDEF_JOY_XAXIS},
-    {CFGT_Int,      "joy_axis2",         &joy_axis[1],    CFGDEF_JOY_YAXIS},
-    {CFGT_Int,      "joy_axis3",         &joy_axis[2],    AXIS_DISABLE},
-    {CFGT_Int,      "joy_axis4",         &joy_axis[3],    AXIS_DISABLE},
-    {CFGT_Int,      "joy_axis5",         &joy_axis[4],    AXIS_DISABLE},
-    {CFGT_Int,      "joy_axis6",         &joy_axis[5],    AXIS_DISABLE},
     {CFGT_Int,      "joystick_device1",   &joystick_devices[0], 0},
     {CFGT_Int,      "joystick_device2",   &joystick_devices[1], 0},
+    {CFGT_Int,      "joy_axis1",         &input_options.joy_axis[0],    CFGDEF_JOY_XAXIS},
+    {CFGT_Int,      "joy_axis2",         &input_options.joy_axis[1],    CFGDEF_JOY_YAXIS},
+    {CFGT_Int,      "joy_axis3",         &input_options.joy_axis[2],    AXIS_DISABLE},
+    {CFGT_Int,      "joy_axis4",         &input_options.joy_axis[3],    AXIS_DISABLE},
+    {CFGT_Int,      "joy_axis5",         &input_options.joy_axis[4],    AXIS_DISABLE},
+    {CFGT_Int,      "joy_axis6",         &input_options.joy_axis[5],    AXIS_DISABLE},
 
     {CFGT_Int,      "monitor_size",      &monitor_size,   1}, // Changed to always do 16:9 by default!
     {CFGT_Int,      "screen_hud",        &screen_hud,     CFGDEF_SCREEN_HUD},
@@ -202,57 +202,57 @@ static default_t defaults[] =
 
 	// -------------------- KEYS --------------------
 
-    {CFGT_Key,      "key_right",         &key_right,      CFGDEF_KEY_RIGHT},
-    {CFGT_Key,      "key_left",          &key_left,       CFGDEF_KEY_LEFT},
-    {CFGT_Key,      "key_up",            &key_up,         CFGDEF_KEY_UP},
-    {CFGT_Key,      "key_down",          &key_down,       CFGDEF_KEY_DOWN},
-    {CFGT_Key,      "key_lookup",        &key_lookup,     CFGDEF_KEY_LOOKUP},
-    {CFGT_Key,      "key_lookdown",      &key_lookdown,   CFGDEF_KEY_LOOKDOWN},
-    {CFGT_Key,      "key_lookcenter",    &key_lookcenter, CFGDEF_KEY_LOOKCENTER},
+    {CFGT_Key,      "key_right",         &input_options.key_right,      CFGDEF_KEY_RIGHT},
+    {CFGT_Key,      "key_left",          &input_options.key_left,       CFGDEF_KEY_LEFT},
+    {CFGT_Key,      "key_up",            &input_options.key_up,         CFGDEF_KEY_UP},
+    {CFGT_Key,      "key_down",          &input_options.key_down,       CFGDEF_KEY_DOWN},
+    {CFGT_Key,      "key_lookup",        &input_options.key_lookup,     CFGDEF_KEY_LOOKUP},
+    {CFGT_Key,      "key_lookdown",      &input_options.key_lookdown,   CFGDEF_KEY_LOOKDOWN},
+    {CFGT_Key,      "key_lookcenter",    &input_options.key_lookcenter, CFGDEF_KEY_LOOKCENTER},
 
     // -ES- 1999/03/28 Zoom Key
-    {CFGT_Key,      "key_zoom",          &key_zoom,        CFGDEF_KEY_ZOOM},
-    {CFGT_Key,      "key_strafeleft",    &key_strafeleft,  CFGDEF_KEY_STRAFELEFT},
-    {CFGT_Key,      "key_straferight",   &key_straferight, CFGDEF_KEY_STRAFERIGHT},
+    {CFGT_Key,      "key_zoom",          &input_options.key_zoom,        CFGDEF_KEY_ZOOM},
+    {CFGT_Key,      "key_strafeleft",    &input_options.key_strafeleft,  CFGDEF_KEY_STRAFELEFT},
+    {CFGT_Key,      "key_straferight",   &input_options.key_straferight, CFGDEF_KEY_STRAFERIGHT},
 
     // -ACB- for -MH- 1998/07/02 Flying Keys
-    {CFGT_Key,      "key_flyup",         &key_flyup,      CFGDEF_KEY_FLYUP},
-    {CFGT_Key,      "key_flydown",       &key_flydown,    CFGDEF_KEY_FLYDOWN},
+    {CFGT_Key,      "key_flyup",         &input_options.key_flyup,      CFGDEF_KEY_FLYUP},
+    {CFGT_Key,      "key_flydown",       &input_options.key_flydown,    CFGDEF_KEY_FLYDOWN},
 
-    {CFGT_Key,      "key_fire",          &key_fire,       CFGDEF_KEY_FIRE},
-    {CFGT_Key,      "key_use",           &key_use,        CFGDEF_KEY_USE},
-    {CFGT_Key,      "key_strafe",        &key_strafe,     CFGDEF_KEY_STRAFE},
-    {CFGT_Key,      "key_speed",         &key_speed,      CFGDEF_KEY_SPEED},
-    {CFGT_Key,      "key_autorun",       &key_autorun,    CFGDEF_KEY_AUTORUN},
-    {CFGT_Key,      "key_nextweapon",    &key_nextweapon, CFGDEF_KEY_NEXTWEAPON},
-    {CFGT_Key,      "key_prevweapon",    &key_prevweapon, CFGDEF_KEY_PREVWEAPON},
+    {CFGT_Key,      "key_fire",          &input_options.key_fire,       CFGDEF_KEY_FIRE},
+    {CFGT_Key,      "key_use",           &input_options.key_use,        CFGDEF_KEY_USE},
+    {CFGT_Key,      "key_strafe",        &input_options.key_strafe,     CFGDEF_KEY_STRAFE},
+    {CFGT_Key,      "key_speed",         &input_options.key_speed,      CFGDEF_KEY_SPEED},
+    {CFGT_Key,      "key_autorun",       &input_options.key_autorun,    CFGDEF_KEY_AUTORUN},
+    {CFGT_Key,      "key_nextweapon",    &input_options.key_nextweapon, CFGDEF_KEY_NEXTWEAPON},
+    {CFGT_Key,      "key_prevweapon",    &input_options.key_prevweapon, CFGDEF_KEY_PREVWEAPON},
 
-    {CFGT_Key,      "key_180",           &key_180,        CFGDEF_KEY_180},
+    {CFGT_Key,      "key_180",           &input_options.key_180,        CFGDEF_KEY_180},
     {CFGT_Key,      "key_map",           &key_map,        CFGDEF_KEY_MAP},
-    {CFGT_Key,      "key_talk",          &key_talk,       CFGDEF_KEY_TALK},
+    {CFGT_Key,      "key_talk",          &input_options.key_talk,       CFGDEF_KEY_TALK},
     {CFGT_Key,      "key_console",       &key_console,    CFGDEF_KEY_CONSOLE},  // -AJA- 2007/08/15.
     {CFGT_Key,      "key_pause",         &key_pause,      KEYD_PAUSE},          // -AJA- 2010/06/13.
 
-    {CFGT_Key,      "key_mlook",         &key_mlook,      CFGDEF_KEY_MLOOK},  // -AJA- 1999/07/27.
-    {CFGT_Key,      "key_secondatk",     &key_secondatk,  CFGDEF_KEY_SECONDATK},  // -AJA- 2000/02/08.
-    {CFGT_Key,      "key_reload",        &key_reload,     CFGDEF_KEY_RELOAD},  // -AJA- 2004/11/11.
-    {CFGT_Key,      "key_action1",       &key_action1,    CFGDEF_KEY_ACTION1},  // -AJA- 2009/09/07
-    {CFGT_Key,      "key_action2",       &key_action2,    CFGDEF_KEY_ACTION2},  // -AJA- 2009/09/07
+    {CFGT_Key,      "key_mlook",         &input_options.key_mlook,      CFGDEF_KEY_MLOOK},  // -AJA- 1999/07/27.
+    {CFGT_Key,      "key_secondatk",     &input_options.key_secondatk,  CFGDEF_KEY_SECONDATK},  // -AJA- 2000/02/08.
+    {CFGT_Key,      "key_reload",        &input_options.key_reload,     CFGDEF_KEY_RELOAD},  // -AJA- 2004/11/11.
+    {CFGT_Key,      "key_action1",       &input_options.key_action1,    CFGDEF_KEY_ACTION1},  // -AJA- 2009/09/07
+    {CFGT_Key,      "key_action2",       &input_options.key_action2,    CFGDEF_KEY_ACTION2},  // -AJA- 2009/09/07
     //tapamn key_action3/4 where added in revision 6, but never defined
-	{CFGT_Key,      "key_action3",       &key_action3,    CFGDEF_KEY_ACTION3},  // -AJA- 2009/09/07
-    {CFGT_Key,      "key_action4",       &key_action4,    CFGDEF_KEY_ACTION4},  // -AJA- 2009/09/07
+	{CFGT_Key,      "key_action3",       &input_options.key_action3,    CFGDEF_KEY_ACTION3},  // -AJA- 2009/09/07
+    {CFGT_Key,      "key_action4",       &input_options.key_action4,    CFGDEF_KEY_ACTION4},  // -AJA- 2009/09/07
 
 	// -AJA- 2010/06/13: weapon and automap keys
-	{CFGT_Key,      "key_weapon1",       &key_weapons[1], '1'},
-	{CFGT_Key,      "key_weapon2",       &key_weapons[2], '2'},
-	{CFGT_Key,      "key_weapon3",       &key_weapons[3], '3'},
-	{CFGT_Key,      "key_weapon4",       &key_weapons[4], '4'},
-	{CFGT_Key,      "key_weapon5",       &key_weapons[5], '5'},
-	{CFGT_Key,      "key_weapon6",       &key_weapons[6], '6'},
-	{CFGT_Key,      "key_weapon7",       &key_weapons[7], '7'},
-	{CFGT_Key,      "key_weapon8",       &key_weapons[8], '8'},
-	{CFGT_Key,      "key_weapon9",       &key_weapons[9], '9'},
-	{CFGT_Key,      "key_weapon0",       &key_weapons[0], '0'},
+	{CFGT_Key,      "key_weapon1",       &input_options.key_weapons[1], '1'},
+	{CFGT_Key,      "key_weapon2",       &input_options.key_weapons[2], '2'},
+	{CFGT_Key,      "key_weapon3",       &input_options.key_weapons[3], '3'},
+	{CFGT_Key,      "key_weapon4",       &input_options.key_weapons[4], '4'},
+	{CFGT_Key,      "key_weapon5",       &input_options.key_weapons[5], '5'},
+	{CFGT_Key,      "key_weapon6",       &input_options.key_weapons[6], '6'},
+	{CFGT_Key,      "key_weapon7",       &input_options.key_weapons[7], '7'},
+	{CFGT_Key,      "key_weapon8",       &input_options.key_weapons[8], '8'},
+	{CFGT_Key,      "key_weapon9",       &input_options.key_weapons[9], '9'},
+	{CFGT_Key,      "key_weapon0",       &input_options.key_weapons[0], '0'},
 
 	{CFGT_Key,      "key_am_up",         &key_am_up,      KEYD_UPARROW},
 	{CFGT_Key,      "key_am_down",       &key_am_down,    KEYD_DOWNARROW},
