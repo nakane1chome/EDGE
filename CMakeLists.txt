@@ -263,8 +263,8 @@ endif(MSVC)
 
 if(UNIX)
 	set(ogg_RELEASE_LIBRARY "libvorbisfile.so" )
-	set(SDL2_INCLUDE_DIR /usr/include/SDL2)
-	set(SDL2_LIBRARIES /usr/lib/libSDL2.so)
+	set(SDL2_INCLUDE_DIRS /usr/include/SDL2)
+	set(SDL2_LIBRARIES /usr/lib/x86_64-linux-gnu/libSDL2.so)
 	find_package(SDL2 REQUIRED)
 endif(UNIX)
 
