@@ -330,8 +330,11 @@ static void InstallTextureLumps(int file, const wadtex_resource_c *WT)
 		// -ES- 2000/02/10 Texture must have patches.
 		int patchcount = EPI_LE_S16(mtexture->patch_count);
 		if (!patchcount)
-			I_Error("W_InitTextures: Texture '%.8s' has no patches", mtexture->name);
-
+		{
+			I_Warning("W_InitTextures: Texture '%.8s' has no patches", mtexture->name);
+			//I_Error("W_InitTextures: Texture '%.8s' has no patches", mtexture->name);
+			patchcount = 0; //mark it as a dud
+		} 
 		int width = EPI_LE_S16(mtexture->width);
 		if (width == 0)
 			I_Error("W_InitTextures: Texture '%.8s' has zero width", mtexture->name);
@@ -355,7 +358,9 @@ static void InstallTextureLumps(int file, const wadtex_resource_c *WT)
 		texture->patchcount = patchcount;
 
 		Z_StrNCpy(texture->name, mtexture->name, 8);
-		strupr(texture->name);
+		for (size_t i=0;i<strlen(texture->name);i++) {
+			texture->name[i] = toupper(texture->name[i]);
+		}
 
 		const raw_patchdef_t *mpatch = &mtexture->patches[0];
 		texpatch_t *patch = &texture->patches[0];
@@ -430,9 +435,9 @@ void W_InitTextures(void)
 		wadtex_resource_c WT;
 		raw_vswap_t WF;
 
-		if (wolf3d_mode)
-			W_GetWolfTextureLumps(file, &WF);
-		else
+		//if (wolf3d_mode)
+		//	W_GetWolfTextureLumps(file, &WF);
+		//else
 			W_GetTextureLumps(file, &WT);
 
 		if (WT.pnames < 0)
@@ -454,11 +459,16 @@ void W_InitTextures(void)
 	}
 
 	if (tex_sets.GetSize() == 0)
+    {
 		if (!wolf3d_mode)
+        {
 			I_Error("No textures found !  Make sure the chosen IWAD is valid.\n");
-		else
+        }
+        else
+        {
 			I_Printf("No textures found for Wolf, but DDF will grab 'em\n");
-
+        }
+    }
 	// now clump all of the texturedefs together and sort 'em, primarily
 	// by increasing name, secondarily by increasing file number
 	// (measure of newness).  We ignore "dud" textures (missing

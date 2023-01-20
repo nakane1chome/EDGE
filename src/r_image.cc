@@ -48,6 +48,8 @@
 #include "../epi/image_jpeg.h"
 #include "../epi/image_tga.h"
 
+#include "ddf/flat.h"
+
 #include "dm_data.h"
 #include "dm_defs.h"
 #include "dm_state.h"
@@ -70,6 +72,8 @@
 
 // LIGHTING DEBUGGING
 // #define MAKE_TEXTURES_WHITE  1
+
+swirl_type_e swirling_flats = SWIRL_Vanilla;
 
 extern epi::image_data_c *ReadAsEpiBlock(image_c *rim);
 
@@ -111,8 +115,8 @@ cached_image_t;
 typedef std::list<image_c *> real_image_container_c;
 
 static image_c *do_Lookup(real_image_container_c& bucket, const char *name,
-	int source_type = -1
-/* use -2 to prevent USER override */)
+                          int source_type = -1
+						  /* use -2 to prevent USER override */)
 {
 	// for a normal lookup, we want USER images to override
 	if (source_type == -1)
@@ -166,7 +170,7 @@ static void do_Animate(real_image_container_c& bucket)
 	}
 }
 
-#if 1
+#if 0
 static void do_DebugDump(real_image_container_c& bucket)
 {
 	L_WriteDebug("{\n");
@@ -254,11 +258,11 @@ static inline void Unlink(cached_image_t *rc)
 //
 //  IMAGE CREATION
 //
-//TODO: V730 https://www.viva64.com/en/w/v730/
-image_c::image_c() : actual_w(0), actual_h(0), total_w(0), total_h(0), 
-source_type(IMSRC_Dummy),
-source_palette(-1),
-cache()
+
+image_c::image_c() : actual_w(0), actual_h(0), total_w(0), total_h(0),
+					 source_type(IMSRC_Dummy),
+					 source_palette(-1),
+					 cache()
 {
 	strcpy(name, "_UNINIT_");
 
@@ -290,7 +294,8 @@ static image_c *NewImage(int width, int height, int opacity = OPAC_Unknown)
 	rim->anim.cur = rim;
 	rim->anim.next = NULL;
 	rim->anim.count = rim->anim.speed = 0;
-
+	rim->liquid_type = LIQ_None;
+	rim->swirled_gametic = 0;
 	return rim;
 }
 
@@ -334,8 +339,8 @@ static image_c *CreateDummyImage(const char *name, rgbcol_t fg, rgbcol_t bg)
 }
 
 static image_c *AddImageGraphic(const char *name, image_source_e type, int lump,
-	real_image_container_c& container,
-	const image_c *replaces = NULL)
+								real_image_container_c& container,
+								const image_c *replaces = NULL)
 {
 	/* also used for Sprites and TX/HI stuff */
 
@@ -379,8 +384,8 @@ static image_c *AddImageGraphic(const char *name, image_source_e type, int lump,
 	{
 		is_png = true;
 
-		if (!PNG_GetInfo(f, &width, &height, &solid) ||
-			width <= 0 || height <= 0)
+		if (! PNG_GetInfo(f, &width, &height, &solid) ||
+		    width <= 0 || height <= 0)
 		{
 			I_Error("Error scanning PNG image in '%s' lump\n", W_GetLumpName(lump));
 		}
@@ -511,7 +516,7 @@ static image_c *AddImageGraphic(const char *name, image_source_e type, int lump,
 			// do checking for ROTT Graphics _FIRST_
 			int expectlen = width * height + 8; //if (lump_len != expectlen)
 //#if 1
-			if ((lump_len != expectlen) && (type == IMSRC_Graphic ^ IMSRC_rottpic))
+			if ((lump_len != expectlen) && (type == IMSRC_rottpic))// ^ IMSRC_rottpic))
 			{
 				//I_Printf("rottpic: '%s' seems to be a raw image + header (lpic_t)..lump_len = '%d'\n", name, lump_len);
 			//	I_Printf("rottpic: '%s' width: '%d' height: '%d'\n", name, rottpic->width, rottpic->height);
@@ -549,8 +554,21 @@ static image_c *AddImageGraphic(const char *name, image_source_e type, int lump,
 				return rim;
 			}
 
+			// ~CA: Explicitly check for Widescreen len and set it as such (todo: refactor mundo titlescreenWS hack)
+			if (lump_len == 560 * 200 && type == IMSRC_Graphic)
+			{
+				I_Printf("AddImage: '%s' seems to be a widescreen image\n", name);
+				image_c* rim = NewImage(560, 200, OPAC_Solid); //!!! remember: width/height were previously 320x200
+				strcpy(rim->name, name);
 
-			// check for ROTT, which are raw 128x128
+				rim->source_type = IMSRC_WideTitle560x200;
+				rim->source.flat.lump = lump;
+				rim->source_palette = W_GetPaletteForLump(lump);
+				return rim;
+			}
+
+
+			// check for ROTT stuff, which are raw 128x128
 			if (lump_len == 128 * 128 && type == IMSRC_ROTTRaw128x128)// || IMSRC_ROTTGFX)
 			{
 				I_Printf("ROTT RawFlat: '%s' seems to be a raw image, 320x200 it..\n", name);
@@ -577,17 +595,30 @@ static image_c *AddImageGraphic(const char *name, image_source_e type, int lump,
 	// create new image
 	image_c *rim = NewImage(width, height, solid ? OPAC_Solid : OPAC_Unknown);
 
-	strcpy(rim->name, name);
+	
 	rim->offset_x = offset_x;//!!! || roffset_x;
 	rim->offset_y = offset_y;//!!! || roffset_y;
 
 	//if (offset_x != roffset_x)
 	//I_Printf("IMAGE [%s]: offset x = [%s], offset y = [%s]\n", rim->name, rim->offset_x, rim->offset_y);
-
+	strcpy(rim->name, name);
 #if (IMAGE_DEBUG)
 	I_Printf("IMAGE: Creating new image [%s].\n", name);
 #endif
 
+	
+	if (swirling_flats > SWIRL_Vanilla)
+	{
+		flatdef_c *current_flatdef = flatdefs.Find(rim->name);
+
+		if (current_flatdef && !current_flatdef->liquid.empty())
+		{
+			if (strcasecmp(current_flatdef->liquid.c_str(), "THIN") == 0)
+				rim->liquid_type = LIQ_Thin;
+			else if (strcasecmp(current_flatdef->liquid.c_str(), "THICK") == 0)
+				rim->liquid_type = LIQ_Thick;
+		}
+	}
 
 	rim->source_type = type;
 	rim->source.graphic.lump = lump;
@@ -618,6 +649,19 @@ static image_c *AddImageTexture(const char *name, texturedef_t *tdef)
 	rim = NewImage(tdef->width, tdef->height);
 
 	strcpy(rim->name, name);
+	
+	if (swirling_flats > SWIRL_Vanilla)
+	{
+		flatdef_c *current_flatdef = flatdefs.Find(rim->name);
+
+		if (current_flatdef && !current_flatdef->liquid.empty())
+		{
+			if (strcasecmp(current_flatdef->liquid.c_str(), "THIN") == 0)
+				rim->liquid_type = LIQ_Thin;
+			else if (strcasecmp(current_flatdef->liquid.c_str(), "THICK") == 0)
+				rim->liquid_type = LIQ_Thick;
+		}
+	}
 
 	if (tdef->scale_x) rim->scale_x = 8.0 / tdef->scale_x;
 	if (tdef->scale_y) rim->scale_y = 8.0 / tdef->scale_y;
@@ -668,6 +712,8 @@ static image_c *AddImageFlat(const char *name, int lump)
 		// support for odd-size Hexen flats
 	case 64 * 128: size = 64; break;
 
+	case 128 * 128: size = 128; break;
+
 		// support for ROTT "flats"
 	case 128 * 128 + 8: size = 128; break;
 
@@ -693,6 +739,19 @@ static image_c *AddImageFlat(const char *name, int lump)
 	rim->source_type = IMSRC_Flat;
 	rim->source.flat.lump = lump;
 	rim->source_palette = W_GetPaletteForLump(lump);
+	
+	if (swirling_flats > SWIRL_Vanilla)
+	{
+		flatdef_c *current_flatdef = flatdefs.Find(rim->name);
+
+		if (current_flatdef && !current_flatdef->liquid.empty())
+		{
+			if (strcasecmp(current_flatdef->liquid.c_str(), "THIN") == 0)
+				rim->liquid_type = LIQ_Thin;
+			else if (strcasecmp(current_flatdef->liquid.c_str(), "THICK") == 0)
+				rim->liquid_type = LIQ_Thick;
+		}
+	}
 
 	real_flats.push_back(rim);
 
@@ -741,20 +800,20 @@ static image_c *AddLBMImage(const char *name, int lump)
 
 	//len = W_LumpLength(lump);
 
-	rim = NewImage(320, 200, OPAC_Solid);
+rim = NewImage(320, 200, OPAC_Solid);
 
-	strcpy(rim->name, name);
+strcpy(rim->name, name);
 
-	rim->source_type = IMSRC_ROTTLBM;
-	rim->source.flat.lump = lump;
-	rim->source_palette = W_GetPaletteForLump(lump);
+rim->source_type = IMSRC_ROTTLBM;
+rim->source.flat.lump = lump;
+rim->source_palette = W_GetPaletteForLump(lump);
 
-	raw_graphics.push_back(rim);
+raw_graphics.push_back(rim);
 
-	return rim;
+return rim;
 }
 
-static image_c *AddImageUser(imagedef_c *def)
+static image_c* AddImageUser(imagedef_c* def)
 {
 	int w, h;
 	bool solid;
@@ -767,8 +826,7 @@ static image_c *AddImageUser(imagedef_c *def)
 		break;
 
 	case IMGDT_Builtin:
-		//(detail_level == 2) ? 512 : 256;
-		// If this breaks from upping width/height, implement detail_level from DC code!
+		//!!!!! (detail_level == 2) ? 512 : 256;
 		w = 256;
 		h = 256;
 		solid = false;
@@ -777,9 +835,9 @@ static image_c *AddImageUser(imagedef_c *def)
 	case IMGDT_File:
 	case IMGDT_Lump:
 	{
-		const char *basename = def->info.c_str();
+		const char* basename = def->info.c_str();
 
-		epi::file_c *f = OpenUserFileOrLump(def);
+		epi::file_c* f = OpenUserFileOrLump(def);
 
 		if (!f)
 		{
@@ -792,22 +850,22 @@ static image_c *AddImageUser(imagedef_c *def)
 
 		if (def->format == LIF_EXT)
 			got_info = epi::JPEG_GetInfo(f, &w, &h, &solid);
-		else if  (def->format == LIF_JPEG)
+		else if (def->format == LIF_JPEG)
 			got_info = epi::JPEG_GetInfo(f, &w, &h, &solid);
 		else if (def->format == LIF_TGA)
 			got_info = epi::TGA_GetInfo(f, &w, &h, &solid);
 		else if (def->format == LIF_PNG)
 			got_info = epi::PNG_GetInfo(f, &w, &h, &solid);
-		else if (!def->format)
+		else //if (!def->format)
 			got_info = epi::JPEG_GetInfo(f, &w, &h, &solid);
 
 		if (!got_info)
-		{
-			CloseUserFileOrLump(def, f);
-			I_Warning("Error occurred scanning image: %s\n", basename);
-			//got_info = epi::JPEG_GetInfo(f, &w, &h, &solid);
-			return NULL;
-		}
+			//	{
+					//CloseUserFileOrLump(def, f);
+			I_Error("Error occurred scanning image: %s\n", basename);
+		//got_info = epi::JPEG_GetInfo(f, &w, &h, &solid);
+		//return NULL;
+//	}
 
 		CloseUserFileOrLump(def, f);
 #if 1
@@ -821,7 +879,7 @@ static image_c *AddImageUser(imagedef_c *def)
 		return NULL; /* NOT REACHED */
 	}
 
-	image_c *rim = NewImage(w, h, solid ? OPAC_Solid : OPAC_Unknown);
+	image_c* rim = NewImage(w, h, solid ? OPAC_Solid : OPAC_Unknown);
 
 	rim->offset_x = def->x_offset;
 	rim->offset_y = def->y_offset;
@@ -838,6 +896,17 @@ static image_c *AddImageUser(imagedef_c *def)
 
 	rim->source_type = IMSRC_User;
 	rim->source.user.def = def;
+
+	// CA 6.5.21: Set grAb values for rim before they are copied to def
+	if ((def->format == LIF_PNG))
+	{
+		epi::image_data_c* tmp_img = ReadAsEpiBlock(rim);
+		if (tmp_img->grAb != nullptr)
+		{
+			rim->offset_x = tmp_img->grAb->x;
+			rim->offset_y = tmp_img->grAb->y;
+		}
+	}
 
 	if (def->special & IMGSP_Crosshair)
 	{
@@ -1281,6 +1350,12 @@ static GLuint LoadImageOGL(image_c *rim, const colourmap_c *trans2)
 	{
 		rim->offset_x = tmp_img->grAb->x;
 		rim->offset_y = tmp_img->grAb->y;
+	}
+	
+	if (rim->liquid_type > LIQ_None && (swirling_flats == SWIRL_SMMU || swirling_flats == SWIRL_SMMUSWIRL))
+	{
+		tmp_img->Swirl(leveltime, rim->liquid_type);
+		rim->swirled_gametic = gametic;
 	}
 
 	if (rim->opacity == OPAC_Unknown)
@@ -1738,6 +1813,18 @@ static cached_image_t *ImageCacheOGL(image_c *rim,
 	}
 
 	SYS_ASSERT(rc);
+	
+	if (rim->liquid_type > LIQ_None && (swirling_flats == SWIRL_SMMU || swirling_flats == SWIRL_SMMUSWIRL))
+	{
+		if (rc->parent->liquid_type > LIQ_None && rc->parent->swirled_gametic != gametic)
+		{
+			if (rc->tex_id != 0)
+			{
+				glDeleteTextures(1, &rc->tex_id);
+				rc->tex_id = 0;
+			}
+		}
+	}
 
 #if 0  // REMOVE
 	if (rc->invalidated)
@@ -1857,8 +1944,8 @@ bool W_InitImages(void)
 		var_mipmapping = 1;
 	else if (M_CheckParm("-trilinear"))
 		var_mipmapping = 2;
-	else if (M_CheckParm("-aafilter"))
-		var_mipmapping = 3;
+	//else if (M_CheckParm("-aafilter"))
+		//var_mipmapping = 3;
 
 	//M_CheckBooleanParm("dither", &var_dithering, false);
 

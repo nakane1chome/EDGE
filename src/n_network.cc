@@ -45,7 +45,7 @@ bool netgame = false;
 
 int base_port;
 
-cvar_c m_busywait;
+DEF_CVAR(m_busywait, int, "c", 1);
 
 
 int gametic;
@@ -78,8 +78,8 @@ void N_InitNetwork(void)
 
 	I_Printf("Network: base port is %d\n", base_port);
 
-	N_StartupReliableLink (base_port+0);
-	N_StartupBroadcastLink(base_port+1);
+///	N_StartupReliableLink (base_port+0);
+///	N_StartupBroadcastLink(base_port+1);
 }
 
 
@@ -97,8 +97,8 @@ static void GetPackets(bool do_delay)
 	if (! netgame)
 	{
 		// -AJA- This can make everything a bit "jerky" :-(
-		//if (do_delay && ! m_busywait.d)
-		//	I_Sleep(10 /* millis */);
+		if (do_delay && ! m_busywait)
+			I_Sleep(10 /* millis */);
 		return;
 	}
 
@@ -241,19 +241,19 @@ bool N_BuildTiccmds(void)
 		if (p->builder)
 		{
 
-			ticcmd_t *cmd = &p->in_cmds[maketic % BACKUPTICS];
-			//ticcmd_t *cmd;
+			//ticcmd_t *cmd = &p->in_cmds[maketic % BACKUPTICS];
+			ticcmd_t *cmd;
 
  //    L_WriteDebug("N_BuildTiccmds: pnum %d netgame %c\n", pnum, netgame ? 'Y' : 'n');
 
-			//if (false) // FIXME: temp hack!!!  if (netgame)
-			//	cmd = &p->out_cmds[maketic % (MP_SAVETICS*2)];
-			//else
-			//	cmd = &p->in_cmds[maketic % (MP_SAVETICS*2)];
+			if (false) // FIXME: temp hack!!!  if (netgame)
+				cmd = &p->out_cmds[maketic % (MP_SAVETICS*2)];
+			else
+				cmd = &p->in_cmds[maketic % (MP_SAVETICS*2)];
 
 			p->builder(p, p->build_data, cmd);
 			
-			//cmd->consistency = p->consistency[maketic % (MP_SAVETICS*2)];
+			cmd->consistency = p->consistency[maketic % (MP_SAVETICS*2)];
 		}
 	}
 
@@ -321,9 +321,9 @@ int DetermineLowTic(void)
 	return lowtic;
 }
 
-cvar_c r_lerp;
-cvar_c r_maxfps;
-cvar_c r_vsync;
+DEF_CVAR(r_lerp, int, "c", 1);
+DEF_CVAR(r_maxfps, int, "c", 0);
+DEF_CVAR(r_vsync, int, "c", 0);
 static bool forwardinterpolate = false;
 static float interpolate_point = 1;
 
@@ -359,7 +359,7 @@ void N_SetInterpolater(void)
 	if (paused || menuactive)
 		return;
 	
-	if (r_lerp.d)
+	if (r_lerp)
 	{
 		interpolate_point = N_CalculateCurrentSubTickPosition();
 		if (!forwardinterpolate && interpolate_point > 1)

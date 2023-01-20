@@ -31,7 +31,7 @@
 
 #include "../src/p_action.h"
 
-//#undef  DF
+#undef  DF
 #define DF  DDF_FIELD
 
 #define DDF_MobjHashFunc(x)  (((x) + LOOKUP_CACHESIZE) % LOOKUP_CACHESIZE)
@@ -149,16 +149,18 @@ const commandlist_t thing_commands[] =
 	DF("AMBIENT_SOUND", seesound, DDF_MainLookupSound),
 	DF("SIGHTING_SOUND", seesound, DDF_MainLookupSound),
 	DF("DEATH_SOUND", deathsound, DDF_MainLookupSound),
-	DF("SECRET_SOUND", secretsound, DDF_MainLookupSound),
+
 	DF("OVERKILL_SOUND", overkill_sound, DDF_MainLookupSound),
 	DF("PAIN_SOUND", painsound, DDF_MainLookupSound),
 	DF("STARTCOMBAT_SOUND", attacksound, DDF_MainLookupSound),
 	DF("WALK_SOUND", walksound, DDF_MainLookupSound),
 	DF("JUMP_SOUND", jump_sound, DDF_MainLookupSound),
-	DF("FALLING_SOUND", falling_sound, DDF_MainLookupSound),
+
 	DF("NOWAY_SOUND", noway_sound, DDF_MainLookupSound),
 	DF("OOF_SOUND", oof_sound, DDF_MainLookupSound),
 	DF("GASP_SOUND", gasp_sound, DDF_MainLookupSound),
+	DF("SECRET_SOUND", secretsound, DDF_MainLookupSound), // -CA- 
+	DF("FALLING_SOUND", falling_sound, DDF_MainLookupSound), // -CA- 
 	DF("GLOOP_SOUND", gloopsound, DDF_MainLookupSound), // -CA- 2015/12/23
 
 	DF("FLOAT_SPEED", float_speed, DDF_MainGetFloat),
@@ -402,6 +404,35 @@ const specflags_t simplecond_names[] =
 	{NULL, 0, 0}
 };
 
+const specflags_t inv_types[] =
+{
+    {"INV01", INV_01, 0},
+    {"INV02", INV_02, 0},
+    {"INV03", INV_03, 0},
+    {"INV04", INV_04, 0},
+    {"INV05", INV_05, 0},
+    {"INV06", INV_06, 0},
+    {"INV07", INV_07, 0},
+    {"INV08", INV_08, 0},
+    {"INV09", INV_09, 0},
+    {"INV10", INV_10, 0},
+    {"INV11", INV_11, 0},
+    {"INV12", INV_12, 0},
+    {"INV13", INV_13, 0},
+    {"INV14", INV_14, 0},
+    {"INV15", INV_15, 0},
+    {"INV16", INV_16, 0},
+    {"INV17", INV_17, 0},
+    {"INV18", INV_18, 0},
+    {"INV19", INV_19, 0},
+    {"INV20", INV_20, 0},
+    {"INV21", INV_21, 0},
+    {"INV22", INV_22, 0},
+    {"INV23", INV_23, 0},
+    {"INV24", INV_24, 0},
+    {"INV25", INV_25, 0},	
+    {NULL, 0, 0}
+};
 //
 // DDF_CompareName
 //
@@ -769,6 +800,66 @@ static int ParseBenefitString(const char *info, char *name, char *param,
 //  false.
 //
 
+static bool BenefitTryInventory(const char *name, benefit_t *be,
+								int num_vals)
+{
+	if (CHKF_Positive != DDF_MainCheckSpecialFlag(name, inv_types, 
+		&be->sub.type, false, false))
+	{
+		return false;
+	}
+
+	be->type = BENEFIT_Inventory;
+
+	if (num_vals < 1)
+	{
+		DDF_WarnError("Inventory benefit used, but amount is missing.\n");
+		return false;
+	}
+
+	if (num_vals < 2)
+	{
+		be->limit = be->amount;
+	}
+
+	return true;
+}
+
+static bool BenefitTryInventoryLimit(const char *name, benefit_t *be,
+									 int num_vals)
+{
+	char namebuf[200];
+	int len = strlen(name);
+
+	// check for ".LIMIT" prefix
+	if (len < 7 || DDF_CompareName(name+len-6, ".LIMIT") != 0)
+		return false;
+
+	len -= 6;
+	Z_StrNCpy(namebuf, name, len);
+
+	if (CHKF_Positive != DDF_MainCheckSpecialFlag(namebuf, inv_types, 
+		&be->sub.type, false, false))
+	{
+		return false;
+	}
+
+	be->type = BENEFIT_InventoryLimit;
+	be->limit = 0;
+
+	if (num_vals < 1)
+	{
+		DDF_WarnError("InventoryLimit benefit used, but amount is missing.\n");
+		return false;
+	}
+
+	if (num_vals > 1)
+	{
+		DDF_WarnError("InventoryLimit benefit cannot have a limit value.\n");
+		return false;
+	}
+	return true;
+}
 static bool BenefitTryAmmo(const char *name, benefit_t *be,
 	int num_vals)
 {
@@ -1022,9 +1113,8 @@ static void BenefitAdd(benefit_t **list, benefit_t *source)
 		return;
 	}
 
-	for (tail = (*list); tail && tail->next; tail = tail->next)
-	{
-	}
+	for (tail = (*list); tail && tail->next; tail=tail->next)
+	{ }
 
 	tail->next = cur;
 }
@@ -1058,9 +1148,11 @@ void DDF_MobjGetBenefit(const char *info, void *storage)
 		BenefitTryKey(namebuf, &temp, num_vals) ||
 		BenefitTryHealth(namebuf, &temp, num_vals) ||
 		BenefitTryArmour(namebuf, &temp, num_vals) ||
-		BenefitTryPowerup(namebuf, &temp, num_vals))
+		BenefitTryPowerup(namebuf, &temp, num_vals) ||
+		BenefitTryInventory(namebuf, &temp, num_vals) ||
+		BenefitTryInventoryLimit(namebuf, &temp, num_vals))
 	{
-		BenefitAdd((benefit_t **)storage, &temp);
+		BenefitAdd((benefit_t **) storage, &temp);
 		return;
 	}
 
@@ -1093,9 +1185,8 @@ static void AddPickupEffect(pickup_effect_c **list, pickup_effect_c *cur)
 
 	pickup_effect_c *tail;
 
-	for (tail = (*list); tail && tail->next; tail = tail->next)
-	{
-	}
+	for (tail = (*list); tail && tail->next; tail=tail->next)
+	{ }
 
 	tail->next = cur;
 }
@@ -1310,7 +1401,8 @@ static specflags_t hyper_specials[] =
 	{"VAMPIRE", HF_VAMPIRE, 0},
 	{"AUTOAIM", HF_NO_AUTOAIM, 1},
 	{"TILT", HF_TILT, 0},
-	{"MIRRORED", HF_MIRRORED, 0},
+	{"IMMORTAL", HF_IMMORTAL, 0},
+	{"FLOOR_CLIP", HF_FLOORCLIP, 0},
 	{NULL, 0, 0}
 };
 
@@ -1542,8 +1634,24 @@ static void DDF_MobjGetAngleRange(const char *info, void *storage)
 //  accodingly.  Otherwise returns false.
 //
 
+static bool ConditionTryInventory(const char *name, const char *sub,
+								  condition_check_t *cond)
+{
+	if (CHKF_Positive != DDF_MainCheckSpecialFlag(name, inv_types, 
+		&cond->sub.type, false, false))
+	{
+		return false;
+	}
+
+
+	if (sub[0])
+		sscanf(sub, " %f ", &cond->amount);
+
+	cond->cond_type = COND_Inventory;
+	return true;
+}
 static bool ConditionTryAmmo(const char *name, const char *sub,
-	condition_check_t *cond)
+								  condition_check_t *cond)
 {
 	if (CHKF_Positive != DDF_MainCheckSpecialFlag(name, ammo_types,
 		&cond->sub.type, false, false))
@@ -1703,6 +1811,7 @@ bool DDF_MainParseCondition(const char *info, condition_check_t *cond)
 	}
 
 	if (ConditionTryAmmo(typebuf + t_off, sub_buf, cond) ||
+	    ConditionTryInventory(typebuf + t_off, sub_buf, cond) ||
 		ConditionTryWeapon(typebuf + t_off, sub_buf, cond) ||
 		ConditionTryKey(typebuf + t_off, sub_buf, cond) ||
 		ConditionTryHealth(typebuf + t_off, sub_buf, cond) ||
@@ -1719,7 +1828,7 @@ bool DDF_MainParseCondition(const char *info, condition_check_t *cond)
 
 // ---> mobjdef class
 
-mobjtype_c::mobjtype_c() : name(), state_grp() //TODO: V730 https://www.viva64.com/en/w/v730/ It is possible that not all members of a class are initialized inside the constructor. Consider inspecting: number, secretsound, falling_sound, gloopsound.
+mobjtype_c::mobjtype_c() : name(), state_grp()
 {
 	Default();
 }
@@ -1811,15 +1920,16 @@ void mobjtype_c::CopyDetail(mobjtype_c &src)
 	attacksound = src.attacksound;
 	painsound = src.painsound;
 	deathsound = src.deathsound;
-	secretsound = src.secretsound;
 	overkill_sound = src.overkill_sound;
 	activesound = src.activesound;
 	walksound = src.walksound;
 	jump_sound = src.jump_sound;
-	falling_sound = src.falling_sound;
 	noway_sound = src.noway_sound;
 	oof_sound = src.oof_sound;
 	gasp_sound = src.gasp_sound;
+	
+	secretsound = src.secretsound;
+	falling_sound = src.falling_sound;
 	gloopsound = src.gloopsound;
 
 	fuse = src.fuse;
@@ -1949,6 +2059,10 @@ void mobjtype_c::Default()
 	noway_sound = sfx_None;
 	oof_sound = sfx_None;
 	gasp_sound = sfx_None;
+
+	secretsound = sfx_None;
+	falling_sound = sfx_None;
+	gloopsound = sfx_None;
 
 	fuse = 0;
 	reload_shots = 5;

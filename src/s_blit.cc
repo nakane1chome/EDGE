@@ -28,6 +28,8 @@
 
 #include <list>
 
+#include "defaults.h"
+
 #include "dm_state.h"  // splitscreen_mode
 #include "m_misc.h"
 #include "r_misc.h"   // R_PointToAngle
@@ -38,7 +40,11 @@
 #include "s_blit.h"
 #include "s_music.h"
 
-
+#if __cplusplus > 199711L
+#define register //deprecated in C++11
+#endif //silence 'register' storage class specifier is deprecated and incompatible with C++17 . . .
+// Reverb and falloff stuff - Dasho
+#include "p_blockmap.h"
 
 // Sound must be clipped to prevent distortion (clipping is
 // a kind of distortion of course, but it's much better than
@@ -63,6 +69,14 @@
 mix_channel_c *mix_chan[MAX_CHANNELS];
 int num_chan;
 
+bool vacuum_sfx = false;
+bool submerged_sfx = false;
+bool outdoor_reverb = false;
+bool dynamic_reverb = false;
+bool ddf_reverb = false;
+int ddf_reverb_type = 0;
+int ddf_reverb_ratio = 0;
+int ddf_reverb_delay = 0;
 static int *mix_buffer;
 static int mix_buf_len;
 
@@ -75,7 +89,8 @@ static std::list<epi::sound_data_c *> playing_qbufs;
 static mix_channel_c *queue_chan;
 
 
-int sfx_volume = 0;
+DEF_CVAR(au_sfx_volume, int, "c", CFGDEF_SOUND_VOLUME);
+//int sfx_volume = 0;
 
 static bool sfxpaused = false;
 
@@ -142,7 +157,7 @@ void mix_channel_c::ComputeVolume()
 
 	float sep = 0.5f;
 	float mul = 1.0f;
-
+	float dist = 1.0f;
 	if (pos && category >= SNCAT_Opponent)
 	{
 		if (dev_stereo)
@@ -155,18 +170,21 @@ void mix_channel_c::ComputeVolume()
 
 		if (! boss)
 		{
-			float dist = P_ApproxDistance(listen_x - pos->x, listen_y - pos->y, listen_z - pos->z);
+			dist = P_ApproxDistance(listen_x - pos->x, listen_y - pos->y, listen_z - pos->z);
 
-			// -AJA- this equation was chosen to mimic the DOOM falloff
-			//       function, but instead of cutting out @ dist=1600 it
-			//       tapers off exponentially.
-			mul = exp(-MAX(1.0f, dist - S_CLOSE_DIST) / 800.0f);
+			if (players[consoleplayer1]->mo)
+			{
+			if (P_CheckSightToPoint(players[consoleplayer1]->mo, pos->x, pos->y, pos->z))
+					dist = MAX(1.25f, dist / 100.0f);
+				else
+					dist = MAX(1.25f, dist / 75.0f);
+			}
 		}
 	}
 
 	float MAX_VOL = (1 << (16 - SAFE_BITS - (var_quiet_factor-1))) - 3;
 
-	MAX_VOL = MAX_VOL * mul * slider_to_gain[sfx_volume];
+	MAX_VOL = boss ? MAX_VOL : MAX_VOL / dist * slider_to_gain[au_sfx_volume];
 
 	if (def)
 		MAX_VOL *= PERCENT_2_FLOAT(def->volume);
@@ -187,7 +205,7 @@ void mix_channel_c::ComputeVolume_Split()
 {
 	float MAX_VOL = (1 << (16 - SAFE_BITS - (var_quiet_factor-1))) - 3;
 
-	MAX_VOL = MAX_VOL * slider_to_gain[sfx_volume];
+	MAX_VOL = MAX_VOL * slider_to_gain[au_sfx_volume];
 
 	if (def)
 		MAX_VOL *= PERCENT_2_FLOAT(def->volume);
@@ -264,7 +282,7 @@ void mix_channel_c::ComputeMusicVolume()
 
 	float MAX_VOL = (1 << (16 - SAFE_BITS)) - 3;
 
- 	MAX_VOL = MAX_VOL * slider_to_gain[mus_volume];
+ 	MAX_VOL = MAX_VOL * slider_to_gain[au_mus_volume];
 
 	volume_L = (int) MAX_VOL;
 	volume_R = (int) MAX_VOL;
@@ -283,8 +301,7 @@ static void BlitToU8(const int *src, u8_t *dest, int length)
 		     if (val >  CLIP_THRESHHOLD) val =  CLIP_THRESHHOLD;
 		else if (val < -CLIP_THRESHHOLD) val = -CLIP_THRESHHOLD;
 
-		*dest++ = (u8_t) ((val >> (24-SAFE_BITS)) ^ 0x80); 
-		//TODO: V610 https://www.viva64.com/en/w/v610/ Unspecified behavior. Check the shift operator '>>'. The left operand is negative ('val' = [-134217727..134217727]).
+		*dest++ = (u8_t) ((val >> (24-SAFE_BITS)) ^ 0x80);
 	}
 }
 
@@ -352,8 +369,18 @@ static void MixMono(mix_channel_c *chan, int *dest, int pairs)
 {
 	SYS_ASSERT(pairs > 0);
 
-	const s16_t *src_L = chan->data->data_L;
+	s16_t *src_L;
 
+	if (paused || menuactive)
+		src_L = chan->data->data_L;
+	else
+	{
+		
+		if (!chan->data->is_sfx || chan->category == SNCAT_UI)
+			src_L = chan->data->data_L;
+		else
+			src_L = chan->data->fx_data_L;
+	}
 	int *d_pos = dest;
 	int *d_end = d_pos + pairs;
 
@@ -375,9 +402,28 @@ static void MixStereo(mix_channel_c *chan, int *dest, int pairs)
 {
 	SYS_ASSERT(pairs > 0);
 
-	const s16_t *src_L = chan->data->data_L;
-	const s16_t *src_R = chan->data->data_R;
+	s16_t *src_L;
+	s16_t *src_R;
 
+	if (paused || menuactive)
+	{
+		src_L = chan->data->data_L;
+		src_R = chan->data->data_R;
+	}
+	else
+	{
+		if (!chan->data->is_sfx || chan->category == SNCAT_UI)
+		{
+			src_L = chan->data->data_L;
+			src_R = chan->data->data_R;
+		}
+		else
+		{
+			src_L = chan->data->fx_data_L;
+			src_R = chan->data->fx_data_R;
+		}
+	}
+	
 	int *d_pos = dest;
 	int *d_end = d_pos + pairs * 2;
 
@@ -403,7 +449,17 @@ static void MixInterleaved(mix_channel_c *chan, int *dest, int pairs)
 
 	SYS_ASSERT(pairs > 0);
 
-	const s16_t *src_L = chan->data->data_L;
+	s16_t *src_L;
+
+	if (paused || menuactive)
+		src_L = chan->data->data_L;
+	else
+	{
+		if (!chan->data->is_sfx || chan->category == SNCAT_UI)
+			src_L = chan->data->data_L;
+		else
+			src_L = chan->data->fx_data_L;
+	}
 
 	int *d_pos = dest;
 	int *d_end = d_pos + pairs * 2;
@@ -412,7 +468,8 @@ static void MixInterleaved(mix_channel_c *chan, int *dest, int pairs)
 
 	while (d_pos < d_end)
 	{
-		register fixed22_t pos = (offset >> 9) & ~1;
+		//register fixed22_t pos = (offset >> 9) & ~1;
+		fixed22_t pos = (offset >> 9) & ~1;
 
 		*d_pos++ += src_L[pos  ] * chan->volume_L;
 		*d_pos++ += src_L[pos|1] * chan->volume_R;

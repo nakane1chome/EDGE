@@ -34,16 +34,16 @@
 #include <list>
 #include <vector>
 
-extern cvar_c r_anisotropy;
-extern cvar_c r_colorlighting;
-extern cvar_c r_colormaterial;
+extern int r_anisotropy;
+extern int r_colorlighting;
+extern int r_colormaterial;
 
-extern cvar_c r_dumbsky;
-extern cvar_c r_dumbmulti;
-extern cvar_c r_dumbcombine;
-extern cvar_c r_dumbclamp;
+extern int r_dumbsky;
+extern int r_dumbmulti;
+extern int r_dumbcombine;
+extern int r_dumbclamp;
 
-extern cvar_c r_gl3_path;
+extern int r_gl3_path;
 
 //
 //  RGL_MAIN
@@ -55,6 +55,7 @@ extern int glmax_tex_size;
 extern int glmax_tex_units;
 
 void RGL_Init(void);
+void RGL_ReInit(void);
 void RGL_SoftInit(void);
 void RGL_DrawProgress(int perc, int glbsp_perc);
 void RGL_SetupMatrices2D(void);
@@ -91,10 +92,10 @@ extern const colourmap_c *ren_fx_colmap;
 
 extern int doom_fading;
 
-extern cvar_c r_aspect;
+extern float r_aspect;
 
-extern cvar_c r_nearclip;
-extern cvar_c r_farclip;
+extern float r_nearclip;
+extern float r_farclip;
 
 #define APPROX_DIST2(dx,dy)  \
 	((dx) + (dy) - 0.5f * MIN((dx),(dy)))

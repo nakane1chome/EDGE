@@ -43,15 +43,15 @@ typedef enum
 	FLKIND_PWad,      // normal .wad file
 	FLKIND_EWad,      // EDGE2.wad
 	FLKIND_GWad,      // glbsp node wad
-	FLKIND_SWad,      // startup.wad (from Eternity)
+	//FLKIND_SWad,      // startup.wad (from Eternity)
 	/*
-	FLKIND_WL6,      // .wl6 Wolfenstein datas (needed for mods maybe)
+	      // .wl6 Wolfenstein datas (needed for mods maybe)
 	FLKIND_VGADICT,   // Wolfenstein VGA Dictionary
 	FLKIND_VSWAP,     // Wolfenstein VSWAP
 	FLKIND_VGAGRAPH,  // Wolfenstein VGRAPH
 	FLKIND_AUDIOHED,  // Wolfenstein AUDIOHED
 	FKLIND_AUDIOT,    // Wolfenstein AudioT
-	FLKIND_GAMEMAPS,  // Wolfenstein GAMEMAPS 
+	FLKIND_GAMEMAPS,  // Wolfenstein GAMEMAPS
 	FLKIND_MAPHEAD,   // Wolfenstein MAPHEAD
 	FLKIND_RTLMAPS,   // Rise of the Triad DARKWAR.rtl, similar to maphead
 	*/
@@ -60,6 +60,7 @@ typedef enum
 	FLKIND_PAK,       // Quake PAK
 	FLKIND_PK3,       // PK3 zip file
 	FLKIND_PK7,       // PK7 7zip file
+	FLKIND_WL6,
 
 	FLKIND_Lump,      // raw lump (no extension)
 	FLKIND_ROQ,       // ROQ Video Cinematics
@@ -119,6 +120,7 @@ extern int numlumps;
 extern int addwadnum;
 
 void W_AddRawFilename(const char *file, int kind);
+void WLF_AddRawFilename(const char* file, int kind);
 void W_InitMultipleFiles(void);
 void W_ReadDDF(void);
 void W_ReadCoalLumps(void);
@@ -164,6 +166,10 @@ int W_GetNumFiles(void);
 int W_GetFileForLump(int lump);
 void W_ShowLumps(int for_file, const char *match);
 void W_ShowFiles(void);
+
+// Lobo: auxiliary functions to help us deal with when to use skyboxes
+int W_LoboFindSkyImage(int for_file, const char* match);
+bool W_LoboDisableSkybox(const char* ActualSky);
 
 static void W_ReadLump(int lump, void *dest);
 // Define this only in an emergency.  All these debug printfs quickly

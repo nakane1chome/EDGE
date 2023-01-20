@@ -37,12 +37,14 @@
 #include "r_modes.h"
 #include "r_wipe.h"
 
+#include "r_qbb.h"
+
 #define CON_WIPE_TICS  12
 
 
-cvar_c debug_fps;
-cvar_c debug_pos;
-cvar_c debug_ticrate;
+DEF_CVAR(debug_fps, int, "c", 0);
+DEF_CVAR(debug_pos, int, "c", 0);
+DEF_CVAR(debug_ticrate, int, "c", 0);
 
 static visible_t con_visible;
 
@@ -370,14 +372,13 @@ static void SolidBox(int x, int y, int w, int h, rgbcol_t col, float alpha)
   
 	glColor4f(RGB_RED(col)/255.0, RGB_GRN(col)/255.0, RGB_BLU(col)/255.0, alpha);
   
-	glBegin(GL_QUADS);
+	RQImmBuffer<RQVertex3f> buffer(RQVertex3f::format);
+	buffer.add({(float) x, (float)y, 0.f});
+	buffer.add({(float) x, (float)y + h, 0.f});
+	buffer.add({(float) x + w, (float)y + h, 0.f});
+	buffer.add({(float) x + w, (float)y, 0.f});
+	buffer.draw(GL_QUADS);
 
-	glVertex2i(x,   y);
-	glVertex2i(x,   y+h);
-	glVertex2i(x+w, y+h);
-	glVertex2i(x+w, y);
-  
-	glEnd();
 	glDisable(GL_BLEND);
 }
 
@@ -408,7 +409,7 @@ static void DrawChar(int x, int y, char ch, rgbcol_t col)
 	float ty1 = (py  ) / 16.0;
 	float ty2 = (py+1) / 16.0;
 
-	glBegin(GL_POLYGON);
+	/*glBegin(GL_POLYGON);
   
 	glTexCoord2f(tx1, ty1);
 	glVertex2i(x, y);
@@ -422,7 +423,14 @@ static void DrawChar(int x, int y, char ch, rgbcol_t col)
 	glTexCoord2f(tx2, ty1);
 	glVertex2i(x + FNSZ, y);
   
-	glEnd();
+	glEnd();*/
+
+	RQImmBuffer<RQVertex3fTextured> buffer(RQVertex3fTextured::format);
+	buffer.add({(float) x, (float)y, 0.f, tx1, ty1});
+	buffer.add({(float) x, (float) y + FNSZ, 0.f, tx1, ty2});
+	buffer.add({(float) x + FNSZ, (float)y + FNSZ, 0.f, tx2, ty2});
+	buffer.add({(float) x + FNSZ, (float) y, 0.f, tx2, ty1});
+	buffer.draw(GL_QUADS);
 }
 
 // writes the text on coords (x,y) of the console
@@ -725,21 +733,21 @@ static void TabComplete(void)
 
 	if (match_vars.size() > 0)
 	{
-		CON_Printf("%lu Possible variables:\n", match_vars.size());
+		CON_Printf("%u Possible variables:\n", (int)match_vars.size());
 
 		ListCompletions(match_vars, input_pos, 7, RGB_MAKE(0,208,72));
 	}
 
-	if (match_keys.size() > 0) //TODO: V547 https://www.viva64.com/en/w/v547/ Expression 'match_keys.size() > 0' is always false.
+	if (match_keys.size() > 0)
 	{
-		CON_Printf("%lu Possible keys:\n", match_keys.size());
+		CON_Printf("%u Possible keys:\n", (int)match_keys.size());
 
 		ListCompletions(match_keys, input_pos, 4, RGB_MAKE(0,208,72));
 	}
 
 	if (match_cmds.size() > 0)
 	{
-		CON_Printf("%lu Possible commands:\n", match_cmds.size());
+		CON_Printf("%u Possible commands:\n", (int)match_cmds.size());
 
 		ListCompletions(match_cmds, input_pos, 3, T_ORANGE);
 	}
@@ -750,8 +758,7 @@ static void TabComplete(void)
 	// begin by lumping all completions into one list
 	unsigned int i;
 
-	//TODO: V621 https://www.viva64.com/en/w/v621/ Consider inspecting the 'for' operator. It's possible that the loop will be executed incorrectly or won't be executed at all.
-	for (i = 0; i < match_keys.size(); i++) //TODO: V654 https://www.viva64.com/en/w/v654/ The condition 'i < match_keys.size()' of loop is always false. 
+	for (i = 0; i < match_keys.size(); i++)
 		match_vars.push_back(match_keys[i]);
 
 	for (i = 0; i < match_cmds.size(); i++)
@@ -1111,7 +1118,7 @@ void CON_Ticker(void)
 			if (conwipepos <= 0)
 			{
 				conwipeactive = false;
-				paused = false; //TODO: V640 https://www.viva64.com/en/w/v640/ The code's operational logic does not correspond with its formatting. The statement is indented to the right, but it is always executed. It is possible that curly brackets are missing.
+				paused = false; 
 			}
 		}
 		else
@@ -1120,7 +1127,7 @@ void CON_Ticker(void)
 			if (conwipepos >= CON_WIPE_TICS)
 			{ 
 				conwipeactive = false;
-				paused = true; //TODO: V640 https://www.viva64.com/en/w/v640/ The code's operational logic does not correspond with its formatting. The statement is indented to the right, but it is always executed. It is possible that curly brackets are missing.
+				paused = true; 
 			}
 		}
 	}
@@ -1156,7 +1163,7 @@ void CON_ShowFPS(void)
 {
 	CON_SetupFont();
 
-	if (debug_fps.d <= 0 && debug_pos.d <= 0)
+	if (debug_fps <= 0 && debug_pos <= 0)
 		return;
 
 	static int numframes = 0, lasttime = 0;
@@ -1180,11 +1187,11 @@ void CON_ShowFPS(void)
 
 	int lcount = 2;
 
-	if (debug_fps.d >= 2)
+	if (debug_fps >= 2)
 		lcount++;
 
-	if (debug_pos.d)
-		lcount += 7;
+	if (debug_pos)
+		lcount += 8;
 
 	int x = SCREENWIDTH  - XMUL * 16;
 	int y = SCREENHEIGHT - YMUL * lcount;
@@ -1201,7 +1208,7 @@ void CON_ShowFPS(void)
 		y -= YMUL;
 	}
 
-	if (debug_fps.d >= 2)
+	if (debug_fps >= 2)
 	{
 		sprintf(textbuf, " ms/f: %1.1f", mspf);
 		DrawText(x, y, textbuf, T_GREY176);
@@ -1210,7 +1217,7 @@ void CON_ShowFPS(void)
 
 	y -= YMUL;
 
-	if (debug_pos.d)
+	if (debug_pos)
 	{
 		player_t *p = players[displayplayer];
 		SYS_ASSERT(p);
@@ -1228,6 +1235,10 @@ void CON_ShowFPS(void)
 		y -= YMUL;
 
 		sprintf(textbuf, "angle: %d", (int)ANG_2_FLOAT(p->mo->angle));
+		DrawText(x, y, textbuf, T_GREY176);
+		y -= YMUL;
+
+		sprintf(textbuf, "speed: %1.2f", (float)(p->actual_speed));
 		DrawText(x, y, textbuf, T_GREY176);
 		y -= YMUL;
 

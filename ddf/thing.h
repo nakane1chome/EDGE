@@ -294,10 +294,14 @@ typedef enum
 	// -AJA- 2010/12/23: force models to tilt by viewangle
 	HF_TILT = (1 << 15),
 	
-	HF_MIRRORED = (1 << 16),
+	// -Lobo- 2021/10/24: immortal flag
+	HF_IMMORTAL = (1 << 16),
 
 	// -CA- 2017/09/27: force items to be picked up silently
 	HF_SILENTPICKUP = (1 << 17),
+
+	// -Lobo- 2021/11/18: floorclip flag
+	HF_FLOORCLIP = (1 << 18),
 }
 mobjhyperflag_t;
 
@@ -318,7 +322,9 @@ typedef enum
 	BENEFIT_Key,
 	BENEFIT_Health,
 	BENEFIT_Armour,
-	BENEFIT_Powerup
+	BENEFIT_Powerup,
+	BENEFIT_Inventory,
+	BENEFIT_InventoryLimit
 }
 benefit_type_e;
 
@@ -341,11 +347,24 @@ typedef enum
 
 	AM_9,  AM_10, AM_11, AM_12,
 	AM_13, AM_14, AM_15, AM_16,
+	AM_17, AM_18, AM_19, AM_20,
+	AM_21, AM_22, AM_23, AM_24,
 
-	NUMAMMO  // Total count (16)
+	NUMAMMO  // Total count (24)
 }
 ammotype_e;
 
+// Inventory types defined.
+typedef enum
+{
+	INV_01,	INV_02,	INV_03,	INV_04,	INV_05,
+	INV_06,	INV_07,	INV_08,	INV_09,	INV_10,
+	INV_11,	INV_12,	INV_13,	INV_14,	INV_15,
+	INV_16,	INV_17,	INV_18,	INV_19,	INV_20,
+	INV_21,	INV_22,	INV_23,	INV_24,	INV_25,
+	NUMINV  // Total count (25)
+}
+invtype_e;
 typedef enum
 {
 	// weak armour, saves 33% of damage
@@ -494,6 +513,8 @@ typedef enum
 
 	// player must have ammo (subtype is AM_* value)
 	COND_Ammo,
+	// player must have inventory (subtype is INV_* value)
+	COND_Inventory,
 
 	// player must be jumping
 	COND_Jumping,
@@ -812,15 +833,15 @@ public:
 	struct sfx_s *attacksound;
 	struct sfx_s *painsound;
 	struct sfx_s *deathsound;
-	struct sfx_s *secretsound;
 	struct sfx_s *overkill_sound;
 	struct sfx_s *activesound;
 	struct sfx_s *walksound;
 	struct sfx_s *jump_sound;
-	struct sfx_s *falling_sound;
 	struct sfx_s *noway_sound;
 	struct sfx_s *oof_sound;
 	struct sfx_s *gasp_sound;
+	struct sfx_s *secretsound;
+	struct sfx_s *falling_sound;
 	struct sfx_s *gloopsound;
 
 	int fuse;

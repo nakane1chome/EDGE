@@ -248,9 +248,9 @@ static void RGL_SetupSkyMatrices(float dist)
 	glPushMatrix();
 
 	glLoadIdentity();
-	glFrustum(-view_x_slope * r_nearclip.f, view_x_slope * r_nearclip.f,
-			  -view_y_slope * r_nearclip.f, view_y_slope * r_nearclip.f,
-			  r_nearclip.f, r_farclip.f);
+	glFrustum(-view_x_slope * r_nearclip, view_x_slope * r_nearclip,
+			  -view_y_slope * r_nearclip, view_y_slope * r_nearclip,
+			  r_nearclip, r_farclip);
 
 	glMatrixMode(GL_MODELVIEW);
 	glPushMatrix();
@@ -324,7 +324,7 @@ void RGL_FinishSky(void)
 
 	if (level_flags.mlook || custom_sky_box)
 	{
-		if (! r_dumbsky.d)
+		if (! r_dumbsky)
 			glDepthFunc(GL_GREATER);
 
 		RGL_DrawSkyBox();
@@ -349,7 +349,7 @@ void RGL_FinishSky(void)
 
 void RGL_DrawSkyBox(void)
 {
-	float dist = r_farclip.f / 2.0f;
+	float dist = r_farclip / 2.0f;
 
 	int SK = RGL_UpdateSkyBoxTextures();
 
@@ -358,7 +358,7 @@ void RGL_DrawSkyBox(void)
 	float v0 = 0.0f;
 	float v1 = 1.0f;
 
-	if (r_dumbclamp.d)
+	if (r_dumbclamp)
 	{
 		float size = fake_box[SK].face_size;
 
@@ -370,14 +370,13 @@ void RGL_DrawSkyBox(void)
 
 	float col[4];
 
-	//TODO: V583 https://www.viva64.com/en/w/v583/ The '?:' operator, regardless of its conditional expression, always returns one and the same value: (255).
 	col[0] = LT_RED(255); 
 	col[1] = LT_GRN(255);
 	col[2] = LT_BLU(255);
 	col[3] = 1.0f;
 
 #ifndef DREAMCAST
-	if (r_colormaterial.d || ! r_colorlighting.d)
+	if (r_colormaterial || ! r_colorlighting)
 		glColor4fv(col);
 	else
 	{
@@ -392,6 +391,10 @@ void RGL_DrawSkyBox(void)
 	glBindTexture(GL_TEXTURE_2D, fake_box[SK].tex[WSKY_Top]);
         glNormal3i(0, 0, -1);
 
+	#ifdef APPLE_SILICON
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	#endif
 	glBegin(GL_QUADS);
 	glTexCoord2f(v0, v0); glVertex3f(-dist,  dist, +dist);
 	glTexCoord2f(v0, v1); glVertex3f(-dist, -dist, +dist);
@@ -403,6 +406,10 @@ void RGL_DrawSkyBox(void)
 	glBindTexture(GL_TEXTURE_2D, fake_box[SK].tex[WSKY_Bottom]);
         glNormal3i(0, 0, +1);
 
+	#ifdef APPLE_SILICON
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	#endif
 	glBegin(GL_QUADS);
 	glTexCoord2f(v0, v0); glVertex3f(-dist, -dist, -dist);
 	glTexCoord2f(v0, v1); glVertex3f(-dist,  dist, -dist);
@@ -414,6 +421,10 @@ void RGL_DrawSkyBox(void)
 	glBindTexture(GL_TEXTURE_2D, fake_box[SK].tex[WSKY_North]);
         glNormal3i(0, -1, 0);
 
+	#ifdef APPLE_SILICON
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	#endif
 	glBegin(GL_QUADS);
 	glTexCoord2f(v0, v0); glVertex3f(-dist,  dist, -dist);
 	glTexCoord2f(v0, v1); glVertex3f(-dist,  dist, +dist);
@@ -425,6 +436,10 @@ void RGL_DrawSkyBox(void)
 	glBindTexture(GL_TEXTURE_2D, fake_box[SK].tex[WSKY_East]);
         glNormal3i(-1, 0, 0);
 
+	#ifdef APPLE_SILICON
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	#endif
 	glBegin(GL_QUADS);
 	glTexCoord2f(v0, v0); glVertex3f( dist,  dist, -dist);
 	glTexCoord2f(v0, v1); glVertex3f( dist,  dist, +dist);
@@ -436,6 +451,10 @@ void RGL_DrawSkyBox(void)
 	glBindTexture(GL_TEXTURE_2D, fake_box[SK].tex[WSKY_South]);
         glNormal3i(0, +1, 0);
 
+	#ifdef APPLE_SILICON
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	#endif
 	glBegin(GL_QUADS);
 	glTexCoord2f(v0, v0); glVertex3f( dist, -dist, -dist);
 	glTexCoord2f(v0, v1); glVertex3f( dist, -dist, +dist);
@@ -447,6 +466,10 @@ void RGL_DrawSkyBox(void)
 	glBindTexture(GL_TEXTURE_2D, fake_box[SK].tex[WSKY_West]);
         glNormal3i(+1, 0, 0);
 
+	#ifdef APPLE_SILICON
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	#endif
 	glBegin(GL_QUADS);
 	glTexCoord2f(v0, v0); glVertex3f(-dist, -dist, -dist);
 	glTexCoord2f(v0, v1); glVertex3f(-dist, -dist, +dist);
@@ -466,7 +489,7 @@ void RGL_DrawSkyOriginal(void)
 
 	float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 #ifndef DREAMCAST
-	if (r_colormaterial.d || ! r_colorlighting.d)
+	if (r_colormaterial || ! r_colorlighting)
 		glColor4fv(white);
 	else
 	{
@@ -480,12 +503,16 @@ void RGL_DrawSkyOriginal(void)
 
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, tex_id);
+	 	#ifdef APPLE_SILICON
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	#endif
  
 	// divide screen into 32 vertical strips, since mapping is non-linear
 	glBegin(GL_QUAD_STRIP);
  
 	// FIXME for widescreen
-	float FIELDOFVIEW = CLAMP(5, r_fov.f, 175);
+	float FIELDOFVIEW = CLAMP(5, r_fov, 175);
 
 	if (splitscreen_mode)
 		FIELDOFVIEW = FIELDOFVIEW / 1.5;
@@ -533,7 +560,7 @@ void RGL_DrawSkyPlane(subsector_t *sub, float h)
 {
 	need_to_draw_sky = true;
 
-	if (r_dumbsky.d)
+	if (r_dumbsky)
 		return;
 
 	MIR_Height(h);
@@ -579,7 +606,7 @@ void RGL_DrawSkyWall(seg_t *seg, float h1, float h2)
 {
 	need_to_draw_sky = true;
 
-	if (r_dumbsky.d)
+	if (r_dumbsky)
 		return;
 
 	float x1 = seg->v1->x;
@@ -917,6 +944,16 @@ int RGL_UpdateSkyBoxTextures(void)
 	// check for custom sky boxes
 	info->face[WSKY_North] = W_ImageLookup(
 			UserSkyFaceName(sky_image->name, WSKY_North), INS_Texture, ILF_Null);
+
+	//LOBO 2022:
+	//If we do nothing, our EWAD skybox will be used for all maps.
+	//So we need to disable it if we have a pwad that contains it's
+	//own sky.
+	if (W_LoboDisableSkybox(sky_image->name))
+	{
+		info->face[WSKY_North] = NULL;
+		//I_Printf("Skybox turned OFF\n");
+	}
 
 	if (info->face[WSKY_North])
 	{

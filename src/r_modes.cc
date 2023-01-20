@@ -45,7 +45,6 @@
 // Globals
 int SCREENWIDTH;
 int SCREENHEIGHT;
-int SCREENBITS;
 bool FULLSCREEN;
 
 
@@ -65,21 +64,19 @@ bool R_DepthIsEquivalent(int depth1, int depth2)
 
 	return false;
 }
-
 static int SizeDiff(int w1, int h1, int w2, int h2)
 {
 	return (w1 * 10000 + h1) - (w2 * 10000 + h2);
 }
 
 
-scrmode_c *R_FindResolution(int w, int h, int depth, bool full)
+scrmode_c *R_FindResolution(int w, int h, bool full)
 {
 	for (int i = 0; i < (int)screen_modes.size(); i++)
 	{
 		scrmode_c *cur = screen_modes[i];
 
 		if (cur->width == w && cur->height == h &&
-			R_DepthIsEquivalent(cur->depth, depth) &&
 			cur->full == full)
 		{
 			return cur;
@@ -98,18 +95,9 @@ scrmode_c *R_FindResolution(int w, int h, int depth, bool full)
 //
 void R_AddResolution(scrmode_c *mode)
 {
-    scrmode_c *exist = R_FindResolution(mode->width, mode->height,
-							mode->depth, mode->full);
+    scrmode_c *exist = R_FindResolution(mode->width, mode->height, mode->full);
 	if (exist)
 	{
-		if (mode->depth != exist->depth)
-		{
-			// depth is different but equivalent.  Update current
-			// member in list, giving preference to power-of-two.
-			if (mode->depth == 16 || mode->depth == 32)
-				exist->depth = mode->depth;
-		}
-
 		return;
 	}
 
@@ -128,8 +116,8 @@ void R_DumpResList(void)
 		if (i > 0 && (i % 3) == 0)
 			I_Printf("\n");
 
-        I_Printf("  %4dx%4d @ %02d %s", 
-                 cur->width, cur->height, cur->depth,
+        I_Printf("  %4dx%4d %s",
+                 cur->width, cur->height,
                  cur->full ? "FS " : "win");
 	}
 
@@ -149,11 +137,7 @@ bool R_IncrementResolution(scrmode_c *mode, int what, int dir)
 
 	SYS_ASSERT(dir == 1 || dir == -1);
 
-	int depth = mode->depth;
 	bool full = mode->full;
-
-	if (what == RESINC_Depth)
-		depth = (depth < 20) ? 32 : 16;
 
 	if (what == RESINC_Full)
 		full = !full;
@@ -164,9 +148,6 @@ bool R_IncrementResolution(scrmode_c *mode, int what, int dir)
 	for (int i = 0; i < (int)screen_modes.size(); i++)
 	{
 		scrmode_c *cur = screen_modes[i];
-
-		if (! R_DepthIsEquivalent(cur->depth, depth))
-			continue;
 
 		if (cur->full != full)
 			continue;
@@ -195,7 +176,6 @@ bool R_IncrementResolution(scrmode_c *mode, int what, int dir)
 	{
 		mode->width  = best->width;
 		mode->height = best->height;
-		mode->depth  = best->depth;
 		mode->full   = best->full;
 
 		return true;
@@ -212,7 +192,7 @@ void R_SoftInitResolution(void)
 {
 	L_WriteDebug("R_SoftInitResolution...\n");
 
-	RGL_NewScreenSize(SCREENWIDTH, SCREENHEIGHT, SCREENBITS);
+    RGL_NewScreenSize(SCREENWIDTH, SCREENHEIGHT);
 
 	// -ES- 1999/08/29 Fixes the garbage palettes, and the blank 16-bit console
 	V_SetPalette(PALETTE_NORMAL, 0);
@@ -221,7 +201,6 @@ void R_SoftInitResolution(void)
 	// re-initialise various bits of GL state
 	RGL_SoftInit();
 	RGL_SoftInitUnits();	// -ACB- 2004/02/15 Needed to sort vars lost in res change
-	HUD_Reset(); // Reset COAL
 
 	L_WriteDebug("-  returning true.\n");
 
@@ -237,11 +216,8 @@ static bool DoExecuteChangeResolution(scrmode_c *mode)
 
 	W_DeleteAllImages();
 
-	HUD_Reset();
-
-	RGL_Init();
-	R_SoftInitResolution();
-	HUD_Reset();
+	// fixes white box/black screen problem
+	RGL_ReInit();
 
 	bool was_ok = I_SetScreenSize(mode);
 
@@ -250,7 +226,6 @@ static bool DoExecuteChangeResolution(scrmode_c *mode)
 
 	SCREENWIDTH  = mode->width;
 	SCREENHEIGHT = mode->height;
-	SCREENBITS   = mode->depth;
 	FULLSCREEN   = mode->full;
 
 	// gfx card doesn't like to switch too rapidly
@@ -270,15 +245,6 @@ struct Compare_Res_pred
 		if (A->full != B->full)
 		{
 			return FULLSCREEN ? (A->full > B->full) : (A->full < B->full);
-		}
-
-		if (! R_DepthIsEquivalent(A->depth, B->depth))
-		{
-			int a_equiv = (A->depth < 20) ? 16 : 32;
-			int b_equiv = (B->depth < 20) ? 16 : 32;
-
-			return R_DepthIsEquivalent(SCREENBITS, 16) ?
-				(a_equiv < b_equiv) : (a_equiv > b_equiv);
 		}
 
 		if (A->width != B->width)
@@ -307,7 +273,6 @@ void R_InitialResolution(void)
 
 	mode.width  = SCREENWIDTH;
 	mode.height = SCREENHEIGHT;
-	mode.depth  = SCREENBITS;
 	mode.full   = FULLSCREEN;
 
     if (DoExecuteChangeResolution(&mode))
@@ -349,7 +314,6 @@ bool R_ChangeResolution(scrmode_c *mode)
 
 	old_mode.width  = SCREENWIDTH;
 	old_mode.height = SCREENHEIGHT;
-	old_mode.depth  = SCREENBITS;
 	old_mode.full   = FULLSCREEN;
 
     if (DoExecuteChangeResolution(&old_mode))

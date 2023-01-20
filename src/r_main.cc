@@ -31,12 +31,10 @@
 #include "r_image.h"
 #include "r_renderbuffers.h"
 
-#include "../epi/tarray.h"
-
 #include "m_argv.h"
 #define DEBUG  0
 
-static epi::TArray<std::string>  m_Extensions;
+static std::vector<std::string> m_Extensions;
 
 // implementation limits
 
@@ -46,18 +44,18 @@ int glmax_tex_size;
 int glmax_tex_units;
 extern float max_anisotropic;
 
-extern cvar_c r_bloom;
-extern cvar_c r_lens;
-extern cvar_c r_fxaa;
-extern cvar_c r_fxaa_quality;
-extern cvar_c r_gl3_path;
-extern cvar_c r_anisotropy;
-cvar_c r_aspect;
+extern int r_bloom;
+extern int r_lens;
+extern int r_fxaa;
+extern int r_fxaa_quality;
+extern int r_gl3_path;
+extern int r_anisotropy;
+DEF_CVAR(r_aspect, float, "c", 1.777f);
 
-cvar_c r_nearclip;
-cvar_c r_farclip;
+DEF_CVAR(r_nearclip, float, "c", 4.0f);
+DEF_CVAR(r_farclip, float, "c", 64000.0f);
 
-cvar_c r_stretchworld;
+DEF_CVAR(r_stretchworld, int, "c", 1);
 
 typedef enum
 {
@@ -67,8 +65,6 @@ typedef enum
 	PFT_MULTI_TEX = (1 << 3),
 }
 problematic_feature_e;
-
-
 
 
 typedef struct
@@ -152,9 +148,9 @@ void RGL_SetupMatrices3D(void)
 
 	glLoadIdentity();
 
-	glFrustum(-view_x_slope * r_nearclip.f, view_x_slope * r_nearclip.f,
-		-view_y_slope * r_nearclip.f, view_y_slope * r_nearclip.f,
-		r_nearclip.f, r_farclip.f);
+	glFrustum(-view_x_slope * r_nearclip, view_x_slope * r_nearclip,
+		-view_y_slope * r_nearclip, view_y_slope * r_nearclip,
+		r_nearclip, r_farclip);
 
 	// calculate look-at matrix
 
@@ -162,7 +158,7 @@ void RGL_SetupMatrices3D(void)
 
 	glLoadIdentity();
 
-	if (r_stretchworld.d == 1)
+	if (r_stretchworld == 1)
 	{
 		// We have to scale the pitch to account for the pixel stretching, because the playsim doesn't know about this and treats it as 1:1.
 		// This code taken from GZDoom.
@@ -191,7 +187,7 @@ void RGL_SetupMatrices3D(void)
 
 	// turn on lighting.  Some drivers (e.g. TNT2) don't work properly
 	// without it.
-	if (r_colorlighting.d)
+	if (r_colorlighting)
 	{
 		glEnable(GL_LIGHTING);
 #ifndef DREAMCAST
@@ -201,7 +197,7 @@ void RGL_SetupMatrices3D(void)
 	else
 		glDisable(GL_LIGHTING);
 
-	if (r_colormaterial.d)
+	if (r_colormaterial)
 	{
 		glEnable(GL_COLOR_MATERIAL);
 #ifndef DREAMCAST
@@ -211,7 +207,8 @@ void RGL_SetupMatrices3D(void)
 	else
 		glDisable(GL_COLOR_MATERIAL);
 
-	/* glBlendFunc(GL_SRC_ALPHA, GL_ONE);  // Additive lighting */
+	//!!!
+	 glBlendFunc(GL_SRC_ALPHA, GL_ONE);  // Additive lighting
 }
 
 static inline const char *SafeStr(const void *s)
@@ -244,7 +241,7 @@ static void RGL_CollectExtensions()
 
 			while (extension)
 			{
-				m_Extensions.Push(std::string(extension));
+				m_Extensions.push_back(std::string(extension));
 				extension = strtok(nullptr, " ");
 			}
 
@@ -257,14 +254,14 @@ static void RGL_CollectExtensions()
 		for (int i = 0; i < max; i++)
 		{
 			extension = (const char*)glGetStringi(GL_EXTENSIONS, i);
-			m_Extensions.Push(std::string(extension));
+			m_Extensions.push_back(std::string(extension));
 		}
 	}
 }
 
 static bool RGL_CheckExtension(const char *ext)
 {
-	for (unsigned int i = 0; i < m_Extensions.Size(); ++i)
+	for (unsigned int i = 0; i < m_Extensions.size(); ++i)
 	{
 		if (m_Extensions[i].compare(ext) == 0) return true;
 	}
@@ -302,7 +299,7 @@ void RGL_LoadExtensions()
 		glversion += 10;
 		gl.es = true;
 	}
-
+	
 	const char *version = M_GetParm("-glversion");
 
 	if (version == NULL)
@@ -314,13 +311,24 @@ void RGL_LoadExtensions()
 		double v1 = strtod(version, NULL);
 		double v2 = strtod(glversion, NULL);
 		if (v2 < v1) version = glversion;
-		else 
+		else
 			I_Printf("Emulating OpenGL v %s\n", version);
 	}
 
 	float gl_version = (float)strtod(version, NULL) + 0.01f;
 
-
+	// Broadcom V3D driver check for OpenGLES. Performs a major version check to manually set OpenGL ES version
+	const char *glrenderer = (const char*)glGetString(GL_RENDERER);
+	if (glrenderer && strlen(glversion) > 5) {
+		if (memcmp(glrenderer, "V3D 4", 5) == 0) {
+			gl.es = true;
+			gl_version = 3.1;
+		} else if (memcmp(glrenderer, "V3D 3", 5) == 0) {
+			gl.es = true;
+			gl_version = 2.0;
+		}	
+	}
+	
 	if (gl.es)
 	{
 		if (gl_version < 2.0f)
@@ -343,6 +351,14 @@ void RGL_LoadExtensions()
 		gl.legacyMode = false;
 		//gl.lightmethod = LM_DEFERRED;
 		//gl.buffermethod = BM_DEFERRED;
+		
+		/* Force no_render_buffers for Pi 4 until GLSL 1.20 shaders can be implemented as an alternative.
+		Comment this out to use GL2/3 renderer, but be aware that attempting to enable FXAA/Bloom will crash EDGE. - Dasho */
+		if (glrenderer && strlen(glversion) > 4) {
+			if (memcmp(glrenderer, "V3D ", 4) == 0) {
+				no_render_buffers = true;
+			}	
+		}
 	}
 	else
 	{
@@ -370,7 +386,7 @@ void RGL_LoadExtensions()
 			gl.flags |= RFL_SAMPLER_OBJECTS;
 		}
 
-		// The minimum requirement for the modern render path are GL 3.0 + uniform buffers. 
+		// The minimum requirement for the modern render path are GL 3.0 + uniform buffers.
 		// Also exclude the Linux Mesa driver at GL 3.0 because it errors out on shader compilation.
 		if (gl_version < 3.0f || (gl_version < 3.1f && (!RGL_CheckExtension("GL_ARB_uniform_buffer_object") || strstr(gl.vendorstring, "X.Org") != nullptr)))
 		{
@@ -430,7 +446,7 @@ void RGL_LoadExtensions()
 			//const char *lm = Args->CheckValue("-lightmethod");
 			//if (lm != NULL)
 			//{
-			//	if (!stricmp(lm, "deferred") && gl.lightmethod == LM_DIRECT) 
+			//	if (!stricmp(lm, "deferred") && gl.lightmethod == LM_DIRECT)
 			//		gl.lightmethod = LM_DEFERRED;
 			//}
 
@@ -467,7 +483,7 @@ void RGL_LoadExtensions()
 
 	if (gl.legacyMode)
 	{
-		// fudge a bit with the framebuffer stuff to avoid redundancies in the main code. 
+		// fudge a bit with the framebuffer stuff to avoid redundancies in the main code.
 		// Some of the older cards do not have the ARB stuff but the calls are nearly identical.
 		FUDGE_FUNC(glGenerateMipmap, EXT); //TODO: V760 https://www.viva64.com/en/w/v760/ Two identical blocks of text were found. The second block begins from line 477.
 		FUDGE_FUNC(glGenFramebuffers, EXT);
@@ -554,10 +570,10 @@ void RGL_CheckExtensions_Old(void)
 	{
 		I_Warning("OpenGL: GLSLv%s is less than 2.1! Disabling GLSL\n", glstr_glsl.c_str());
 		no_render_buffers = true;
-		r_bloom.d = 0;
-		r_fxaa.d = 0;
-		r_lens.d = 0;
-		r_gl3_path.d = 0;
+		r_bloom = 0;
+		r_fxaa = 0;
+		r_lens = 0;
+		r_gl3_path = 0;
 	}
 
 	if (GLEW_VERSION_1_3 ||
@@ -578,7 +594,7 @@ void RGL_CheckExtensions_Old(void)
 	}
 	else
 	{
-		I_Warning("OpenGL driver does not support EDGE-Clamp.\n");
+		I_Warning("OpenGL driver does not support Edge-Clamp.\n");
 		r_dumbclamp = 1;
 	}
 
@@ -686,7 +702,9 @@ void RGL_Init(void)
 	//if (!M_CheckParm("-oldGLchecks"))
 		//CA -1.21.2018- ~ New, smarter GL extension checker!
 	//{
+#ifndef VITA
 	RGL_LoadExtensions();
+#endif
 	//}
 		int v = 0;
 		if (!gl.legacyMode)
@@ -701,7 +719,7 @@ void RGL_Init(void)
 		if ((M_CheckParm("-debugopengl")))
 		{
 			I_GLf("GL_EXTENSIONS:");
-			for (unsigned i = 0; i < m_Extensions.Size(); i++)
+			for (unsigned i = 0; i < m_Extensions.size(); i++)
 			{
 				I_GLf(" %s", m_Extensions[i].c_str());
 			}
@@ -761,11 +779,37 @@ void RGL_Init(void)
 	if ((M_CheckParm("-norenderbuffers")))
 	{
 		no_render_buffers = true;
-		r_bloom.d = 0;
-		r_fxaa.d = 0;
-		r_fxaa_quality.d = 0;
-		r_lens.d = 0;
-		r_gl3_path.d = 0;
+		r_bloom = 0;
+		r_fxaa = 0;
+		r_fxaa_quality = 0;
+		r_lens = 0;
+		r_gl3_path = 0;
+		I_Printf("RGL_Init: GL3/Post-Processing disabled!\n");
+		I_Printf("==============================================================================\n");
+	}
+	else if ((!M_CheckParm("-norenderbuffers")))
+		RGL_InitRenderBuffers();
+}
+
+//Duplicate of above with less checks (for fullscreen mode swaps)
+void RGL_ReInit()
+{
+	I_Printf("RGL_ReInit!\n");
+
+	RGL_SoftInit();
+
+	R_SoftInitResolution();
+
+	RGL_SetupMatrices2D();
+
+	if ((M_CheckParm("-norenderbuffers")))
+	{
+		no_render_buffers = true;
+		r_bloom = 0;
+		r_fxaa = 0;
+		r_fxaa_quality = 0;
+		r_lens = 0;
+		r_gl3_path = 0;
 		I_Printf("OpenGL: RenderBuffers/GLSL disabled...\n");
 		I_Printf("==============================================================================\n");
 	}

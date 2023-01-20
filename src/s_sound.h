@@ -27,7 +27,7 @@
 #define __S_SOUND_H__
 
 // Forward declarations
-struct position_c; //CA: 6.8.2016: not class, but struct.
+class position_c;
 struct mobj_s;
 struct sfx_s;
 
@@ -88,7 +88,7 @@ fx_flag_e;
 
 
 // Vars
-extern int sfx_volume;  // 0 .. SND_SLIDER_NUM-1
+extern int au_sfx_volume;  // 0 .. SND_SLIDER_NUM-1
 
 
 // Init/Shutdown

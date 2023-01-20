@@ -95,7 +95,6 @@
 #include "r_gldefs.h"
 #include "s_sound.h"
 #include "s_music.h"
-#include "s_timid.h"
 #include "am_map.h"
 #include "r_draw.h"
 #include "r_modes.h"
@@ -109,33 +108,35 @@
 
 int option_menuon = 0;
 
-extern cvar_c m_language;
-extern cvar_c r_crosshair;
-extern cvar_c r_crosssize;
-extern cvar_c r_lerp;
-extern cvar_c r_gl3_path;
-extern cvar_c r_md5scale;
-extern cvar_c debug_pos;
-extern cvar_c debug_fps;
-extern cvar_c debug_testlerp;
-extern cvar_c r_vsync;
-extern cvar_c m_goobers;
-extern cvar_c mouse_filter;
-extern cvar_c m_diskicon;
-extern cvar_c debug_mouse;
-extern cvar_c debug_joyaxis;
-extern cvar_c g_aggression;
-extern cvar_c m_busywait;
-extern cvar_c r_shadows;
-extern cvar_c r_textscale;
-extern cvar_c r_bloom;
-extern cvar_c r_lens;
-extern cvar_c sound_pitch;
-extern cvar_c r_stretchworld;
-extern cvar_c r_fixspritescale;
-extern cvar_c m_tactile;
+extern std::string m_language;
+extern int r_crosshair;
+extern float r_crosssize;
+extern int r_lerp;
+extern int r_gl3_path;
+extern int r_md5scale;
+extern int debug_pos;
+extern int debug_fps;
+extern int debug_testlerp;
+extern int r_vsync;
+extern int m_goobers;
+// extern cvar_c mouse_filter;
+extern int m_diskicon;
+extern int debug_mouse;
+extern int debug_joyaxis;
+extern int g_aggression;
+extern int m_busywait;
+extern int r_shadows;
+extern float r_textscale;
+extern int r_bloom;
+extern int r_lens;
+extern int sound_pitch;
+extern int r_stretchworld;
+extern int r_fixspritescale;
+extern int m_tactile;
+extern int r_fxaa;
+extern int r_fxaa_quality;
 
-//extern cvar_c r_textscale; //temp hack for HUD text scaling size
+extern float r_textscale; //temp hack for HUD text scaling size
 
 static int menu_crosshair;  // temp hack
 static int menu_crosshair2;  /// love haxxx
@@ -144,6 +145,9 @@ extern int monitor_size;
 extern int joystick_devices[2];
 
 extern bool heretic_mode;
+extern int i_playintro;
+extern int i_playsplash;
+extern int g_showtitle;
 
 //submenus
 static void M_KeyboardOptions(int keypressed);
@@ -153,6 +157,7 @@ static void M_GameplayOptions(int keypressed); /// Make Gameplay Options page-fl
 static void M_AnalogueOptions(int keypressed);
 static void M_SoundOptions(int keypressed);
 static void M_DebugMenu(int keypressed); /// New Debugging Sub-menu
+static void M_StartupMenu(int keypressed); /// New Debugging Sub-menu
 
 static void M_Key2String(int key, char *deststring);
 
@@ -230,7 +235,7 @@ static char SoundBits[] = "8 bit/16 bit/32 bit";
 static char StereoNess[] = "Off/On/Swapped";
 static char MixChans[] = "8/16/32/64/96";
 static char QuietNess[] = "Loud (distorted)/Normal/Soft/Very Soft";
-static char MusicDevs[] = "System/Timidity/OPL";
+static char MusicDevs[] = "System/TinySoundfont/OPL";
 static char SoundPitching[] = "Off/On";
 static char OPL[] = "OPL 1/OPL 3";
 
@@ -307,6 +312,7 @@ static style_c *video_style;
 static style_c *setres_style;
 static style_c *advanced_style;
 static style_c *debugmenu_style; //debugging menu "style"
+static style_c* startup_style;
 
 static void M_ChangeMusVol(int keypressed)
 {
@@ -321,11 +327,6 @@ static void M_ChangeSfxVol(int keypressed)
 static void M_ChangeMixChan(int keypressed)
 {
 	S_ChangeChannelNum();
-}
-
-static void M_ChangeTimidQuiet(int keypressed)
-{
-	S_ChangeTimidQuiet();
 }
 
 static int M_GetCurrentSwitchValue(optmenuitem_t *item)
@@ -380,8 +381,9 @@ static optmenuitem_t mainoptions[] =
 	{OPT_Function, "Language",          NULL,  0, NULL, M_ChangeLanguage, NULL},
 	{OPT_Switch,   "Messages",          YesNo, 2, &showMessages, NULL, "Messages"},
 	{OPT_Plain,    "",                  NULL,  0, NULL, NULL, NULL},
+	{OPT_Function, "Startup Options",	NULL,  0, NULL, M_StartupMenu, "Set Options at Startup" },
 	{OPT_Function, "Debug Menu",	    NULL,  0, NULL, M_DebugMenu, "Debugging Options" },
-	{OPT_Function, "Advanced Start",    NULL,  0, NULL, M_HostNetGame, NULL },
+	{OPT_Function, "Network Start",    NULL,  0, NULL, M_HostNetGame, NULL },
 
 	{OPT_Plain,    "",                  NULL,  0, NULL, NULL, NULL},
 	{OPT_Function, "Reset to Defaults", NULL,  0, NULL, M_ResetDefaults, NULL}
@@ -420,22 +422,23 @@ static menuinfo_t hereticmain_optmenu =
 
 static optmenuitem_t vidoptions[] =
 {
-	{OPT_Slider,  "Brightness",    NULL,  6,  &var_gamma, M_ChangeGamma, NULL},
+	{OPT_Slider,  "Brightness",    NULL,  6,  &r_gamma, M_ChangeGamma, NULL},
 
-	{OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL},
+	{OPT_Boolean, "Video Sync",   YesNo,   2, &r_vsync, NULL, "Enable VSYNC"},
+	{OPT_Switch,  "Interpolation",    YesNo,   2, &r_lerp, NULL, "Uncapped Framerate"},
 
 	{OPT_Switch,  "Monitor Size",  MonitSiz,  5, &monitor_size, M_ChangeMonitorSize, NULL},
 	{OPT_Switch,  "Smoothing",     YesNo, 2, &var_smoothing, M_ChangeMipMap, NULL},
-	{OPT_Switch,  "H.Q.2x Scaling", Hq2xMode, 4, &hq2x_scaling, M_ChangeMipMap, NULL},
-	{OPT_Switch ,  "Detail Level",   Details,  3, &detail_level, M_ChangeMipMap, NULL},
+	{OPT_Switch,  "HQ2x Scaling", Hq2xMode, 4, &hq2x_scaling, M_ChangeMipMap, NULL},
+	{OPT_Switch , "Detail Level",   Details,  3, &detail_level, M_ChangeMipMap, NULL},
 	{OPT_Switch,  "Texture Filtering",     MipMaps,  3, &var_mipmapping, M_ChangeMipMap, NULL},
 	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
 	//{OPT_Slider,   "HUD Text Scale",  HudT, 20,  &r_textscale, M_ChangeHUDTextScale, "Set overall scale of HUD text" },
 	{OPT_Boolean, "Show Disk Icon",  YesNo, 1, &m_diskicon, NULL, NULL},
 	//{OPT_Slider,  "HUD Text Scale",  HudT,  20,  &r_textscale, NULL, "Experimental"},
-	{OPT_Boolean, "Screen Shake",  YesNo, 1, &m_tactile, NULL, "Will also affect user-defined values in COAL!"},
+	{OPT_Boolean, "Screen Shake",  YesNo, 1, &m_tactile, NULL, "Will also affect values in COAL!"},
 	{OPT_Switch,  "Crosshair",       CrossH, 10, &menu_crosshair, M_ChangeCrossHair, NULL},
-	{OPT_Slider, "Crosshair Scale",  NULL, 15, &menu_crosshair2, M_ChangeCrossHairSize, NULL }, /// -- New Crosshair Size Slider (like Global MD5 Scale), define this in LDF!
+	{OPT_Slider, "Crosshair Scale",  NULL, 14, &menu_crosshair2, M_ChangeCrossHairSize, NULL },
 	{OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
 	{OPT_Boolean, "Map Rotation",    YesNo,   2, &rotatemap, NULL, NULL},
 	{OPT_Switch,  "Teleport Flash",  YesNo,   2, &telept_flash, NULL, "Show a Teleport Flash?"},
@@ -445,15 +448,15 @@ static optmenuitem_t vidoptions[] =
 
 static optmenuitem_t advancedoptions[] =
 {
-	{OPT_Switch,  "GL3 Features",     YesNo, 2, &r_gl3_path, NULL, "Toggles advanced features (normals, per-pixel lighting, etc)"}, /// Change from GL1 to GL3
-	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
-	{OPT_Switch,   "Bloom Processing",  YesNo,  2,  &r_bloom, NULL, "Toggle Bloom Shader On or Off"},
+	{OPT_Plain,   "Post-Processing",  NULL,  0,  NULL, NULL,"Including Shaders"},
 	{OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
-	{OPT_Switch,   "Lens Distortion",  YesNo,  2,  &r_lens, NULL, "Toggle Lens Distortion Effect"},
-	{OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL},
-	{OPT_Boolean, "Video Sync",   YesNo,   2, &r_vsync, NULL, "Enable VSYNC"},
+	{OPT_Switch,  "Modern GL3 Renderer",     YesNo, 2, &r_gl3_path, NULL, "Unfinished: there are minor bugs"}, /// Change from GL1 to GL3
+	{OPT_Boolean, "Bloom Processing",  YesNo,  2,  &r_bloom, NULL, "Use r_bloom_amount cvar to set strength"},
+	{OPT_Boolean, "Lens Distortion",  YesNo,  2,  &r_lens, NULL, "Toggle Lens Distortion Effect"},
+	{OPT_Boolean, "FXAA",  YesNo,  2,  &r_fxaa, NULL, "Use r_fxaa_quality cvar to set sample strength"},
+
 	{OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
-	{OPT_Switch,  "Interpolation",    YesNo,   2, &r_lerp, NULL, "Frame Prediction"},
+
 	{OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL},
 	{OPT_Switch,  "Dynamic Lighting", DLMode, 2, &use_dlights, M_ChangeDLights, "DynaLight"},
 	{OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
@@ -475,15 +478,26 @@ static optmenuitem_t debuggingoptions[] =
 	{ OPT_Switch,  "Framerate Info",    YesNo,  2,  &debug_fps, NULL, NULL },
 	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
 	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
-	{ OPT_Switch,  "Show HOM Errors",    YesNo,  2,  &debug_hom, NULL, "showhom" },
+	{ OPT_Boolean,  "Show HOM Errors",    YesNo,  2,  &debug_hom, NULL, "Makes HOMs colorful"},//"showhom" },
 	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
-	{ OPT_Switch,  "Show Position Coords",    YesNo,  2,  &debug_pos, NULL, NULL },
+	{ OPT_Switch,  "Show Position Coords",    YesNo,  2,  &debug_pos, NULL, "Position/World Coords" },
 	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
 	{ OPT_Switch,  "Busy/Wait?", YesNo,  2,  &m_busywait, NULL, "BusyWait" }, //Call to LDF.
 	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
 	{ OPT_Switch,  "Get Psyched!",   YesNo, 2,  &m_goobers, NULL, "Wolf3D Mode: Requires map restart!" },
 	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
-	{OPT_Slider,   "Global MD5 Scale",    NULL,  4,  &r_md5scale, NULL, "(debugging)"}
+	{OPT_Slider,   "Global MD5 Scale",    NULL,  4,  &r_md5scale, NULL, "MD5 Model Global Scalar"}
+};
+
+static optmenuitem_t startupoptions[] =
+{
+	{ OPT_Boolean, "Play Startup Cinematic",YesNo,  2, &i_playintro, NULL, "Play ROQ Cinematic intros"},
+	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
+	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
+	{ OPT_Boolean, "Play Startup SplashScreen", YesNo,  2, &i_playsplash, NULL, "Show EDGE Splashscreen"},
+	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
+	{ OPT_Plain,   "",  NULL,  0,  NULL, NULL, NULL },
+	{ OPT_Plain, "Show TITLESCREEN", YesNo,  2, &g_showtitle, NULL, "Show TITLEPIC, DEBUGGING, THIS CANNOT BE CHANGED HERE"}
 };
 
 ///Screen Options, custom graphic by Julian
@@ -519,6 +533,13 @@ static menuinfo_t debug_optmenu =
 	&advanced_style, 150, 77, "M_SETUPM", NULL, 0, "" //TODO: supposed to be &debugmenu_style and M_DEBUG
 };
 
+// Debug Menu
+static menuinfo_t startup_optmenu =
+{
+	startupoptions, sizeof(startupoptions) / sizeof(optmenuitem_t),
+	&advanced_style, 250, 75, "M_OPTTTL", NULL, 0, "" //TODO: supposed to be &debugmenu_style and M_DEBUG
+};
+
 //
 //  SET RESOLUTION MENU
 //
@@ -528,11 +549,10 @@ static optmenuitem_t resoptions[] =
 	{OPT_Plain,    "",          NULL, 0, NULL, NULL, NULL},
 	{OPT_Plain,    "",          NULL, 0, NULL, NULL, NULL},
 	{OPT_Function, "New Size",  NULL, 0, NULL, M_ChangeResSize, NULL},
-	{OPT_Function, "New Depth", NULL, 0, NULL, M_ChangeResDepth, NULL},
 	{OPT_Function, "New Mode",  NULL, 0, NULL, M_ChangeResFull, NULL},
 	{OPT_Plain,    "",          NULL, 0, NULL, NULL, NULL},
 	{OPT_Function, "Set Resolution", NULL, 0, NULL, M_OptionSetResolution, NULL},
-	//{OPT_Function, "Test Resolution", NULL, 0, NULL, M_OptionTestResolution, NULL}, 
+	//{OPT_Function, "Test Resolution", NULL, 0, NULL, M_OptionTestResolution, NULL},
 		{OPT_Plain,    "",          NULL, 0, NULL, NULL, NULL},
 		{OPT_Plain,    "",          NULL, 0, NULL, NULL, NULL},
 		{OPT_Plain,    "",          NULL, 0, NULL, NULL, NULL}
@@ -559,22 +579,25 @@ static menuinfo_t hereticres_optmenu =
 //
 static optmenuitem_t analogueoptions[] =
 {
-	{OPT_Switch,   "Mouse X Axis",       Axis, 11, &input_options.mouse_xaxis, NULL, NULL},
-	{OPT_Switch,   "Mouse Y Axis",       Axis, 11, &input_options.mouse_yaxis, NULL, NULL},
-	{OPT_Slider,   "X Sensitivity",      NULL, 16, &input_options.mouse_xsens, NULL, NULL},
-	{OPT_Slider,   "Y Sensitivity",      NULL, 16, &input_options.mouse_ysens, NULL, NULL},
+		{OPT_Plain,    "<-Mouse Settings->", NULL, 0,  NULL, NULL, "Mouse Options"},
+		{OPT_Switch,   "Mouse X Axis",       Axis, 11, &input_options.mouse_xaxis, NULL, NULL},
+		{OPT_Switch,   "Mouse Y Axis",       Axis, 11, &input_options.mouse_yaxis, NULL, NULL},
+		{OPT_Slider,   "X Sensitivity",      NULL, 16, &input_options.mouse_xsens, NULL, NULL},
+		{OPT_Slider,   "Y Sensitivity",      NULL, 16, &input_options.mouse_ysens, NULL, NULL},
 	//	{OPT_Slider,   "Mouse Acceleration", NULL, 20,  &mouse_accel, NULL, NULL},
-		{OPT_Boolean,  "Mouse Filtering",    YesNo, 0,  &mouse_filter, NULL, NULL},
+		// {OPT_Boolean,  "Mouse Filtering",    YesNo, 0,  &mouse_filter, NULL, NULL},
+		{OPT_Plain,    "<-Joystick/Gamepads->", NULL, 0,  NULL, NULL, "Joystick Options"},
 		{OPT_Plain,    "",                   NULL, 0,  NULL, NULL, NULL},
-		{OPT_Switch,   "Joystick Device 1", JoyDevs, 7,  &joystick_devices[0], NULL, NULL},
-		{OPT_Switch,   "Joystick Device 2", JoyDevs, 7,  &joystick_devices[1], NULL, NULL},
+		{OPT_Switch,   "Joystick Device 1", JoyDevs, 7,  &joystick_device[0], NULL, "Verify index via console!"},
+		{OPT_Switch,   "Joystick Device 2", JoyDevs, 7,  &joystick_device[1], NULL, "Verify index via console!"},
 		{OPT_Switch,   "First Axis",         Axis, 11, &input_options.joy_axis[0], NULL, NULL},
 		{OPT_Switch,   "Second Axis",        Axis, 11, &input_options.joy_axis[1], NULL, NULL},
 		{OPT_Switch,   "Third Axis",         Axis, 11, &input_options.joy_axis[2], NULL, NULL},
 		{OPT_Switch,   "Fourth Axis",        Axis, 11, &input_options.joy_axis[3], NULL, NULL},
-		{OPT_Switch,   "Fifth Axis",         Axis, 11, &input_options.joy_axis[4], NULL, NULL},
-		{OPT_Switch,   "Sixth Axis",         Axis, 11, &input_options.joy_axis[5], NULL, NULL},
+		{OPT_Switch,   "Fifth Axis",         Axis, 11, &input_options.joy_axis[4], NULL, "Useful for Pad Triggers"},
+		{OPT_Switch,   "Sixth Axis",         Axis, 11, &input_options.joy_axis[5], NULL, "Useful for Pad Triggers"},
 
+		{OPT_Plain,    "<-Calibration->", NULL, 0,  NULL, NULL, "Fine-Tuning"},
 		{OPT_Plain,    "",                   NULL, 0,  NULL, NULL, NULL},
 		{OPT_Slider,   "Turning Speed",      NULL, 12, &var_turnspeed,    NULL, NULL},
 		{OPT_Slider,   "MLook Speed",        NULL, 12, &var_mlookspeed,   NULL, NULL},
@@ -603,8 +626,8 @@ static menuinfo_t hereticanalogue_optmenu =
 //
 static optmenuitem_t soundoptions[] =
 {
-	{OPT_Slider,  "Sound Volume", NULL, SND_SLIDER_NUM, &sfx_volume, M_ChangeSfxVol, NULL},
-	{OPT_Slider,  "Music Volume", NULL, SND_SLIDER_NUM, &mus_volume, M_ChangeMusVol, NULL},
+	{OPT_Slider,  "Sound Volume", NULL, SND_SLIDER_NUM, &au_sfx_volume, M_ChangeSfxVol, NULL},
+	{OPT_Slider,  "Music Volume", NULL, SND_SLIDER_NUM, &au_mus_volume, M_ChangeMusVol, NULL},
 	{OPT_Plain,   "",             NULL, 0,  NULL, NULL, NULL},
 	//{OPT_Switch,  "Sample Rate",  SampleRates, 6, &var_sample_rate,  NULL, "NeedRestart"},
 	//{OPT_Switch,  "Sample Size",  SoundBits, 3,   &var_sound_bits,   NULL, "NeedRestart"},
@@ -616,10 +639,9 @@ static optmenuitem_t soundoptions[] =
 	{OPT_Switch,  "Mix Channels",    MixChans,  4, &var_mix_channels, M_ChangeMixChan, NULL},
 	{OPT_Switch,  "SFX: Quiet Factor",    QuietNess, 3, &var_quiet_factor, NULL, "How normalized do you want the sound?"},
 
-	{OPT_Plain,   "",                NULL, 0,  NULL, NULL, NULL},
+	//{OPT_Plain,   "SF2 File Selection",                SF2FILE, 0,  NULL, NULL, NULL},
 
 	{OPT_Boolean, "OPL Emulation Mode",       OPL,     2, &var_opl_opl3mode, NULL, "OPL1 or OPL3 mode emulation"},
-	{ OPT_Switch, "Timidity Factor", QuietNess, 3, &var_timid_factor, M_ChangeTimidQuiet, NULL },
 };
 
 static menuinfo_t sound_optmenu =
@@ -782,7 +804,7 @@ static menuinfo_t hereticattack_optmenu =
 //
 static optmenuitem_t other_keyconfig[] =
 {
-	{OPT_Plain,     "",                 NULL, 0, NULL, NULL, NULL },
+	//{OPT_Plain,     "",                 NULL, 0, NULL, NULL, NULL },
 	{OPT_KeyConfig, "Strafe",           NULL, 0, &input_options.key_strafe, NULL, NULL},
 	{OPT_KeyConfig, "Run",              NULL, 0, &input_options.key_speed, NULL, NULL},
 	{OPT_KeyConfig, "Toggle Autorun",   NULL, 0, &input_options.key_autorun, NULL, NULL},
@@ -896,7 +918,7 @@ static menuinfo_t * heretic_key_menus[NUM_KEY_MENUS] =
 	&hereticautomap_optmenu
 };
 
-static char keystring1[] = "Enter to change, Backspace to Clear";
+static char keystring1[] = "Enter to Change, Backspace to Clear";
 static char keystring2[] = "Press a key for this action";
 
 //
@@ -1147,6 +1169,7 @@ void M_OptDrawer()
 			k = *(int*)(curr_menu->items[i].switchvar);
 			M_Key2String(k, tempstring);
 			HL_WriteText(style, 1, (curr_menu->menu_center + 15), curry, tempstring);
+			//I_Debugf("Key2String: %s\n", tempstring);
 			break;
 		}
 
@@ -1180,9 +1203,9 @@ static void M_ResOptDrawer(style_c *style, int topy, int bottomy, int dy, int ce
 	HL_WriteText(style, 1, centrex + 15, y, tempstring);
 
 	// Draw depth selection option
-	y += dy;
-	sprintf(tempstring, "%d bit", (new_scrmode.depth < 20) ? 16 : 32);
-	HL_WriteText(style, 1, centrex + 15, y, tempstring);
+//	y += dy;
+//	sprintf(tempstring, "%d bit", (new_scrmode.depth < 20) ? 16 : 32);
+//	HL_WriteText(style, 1, centrex + 15, y, tempstring);
 
 	y += dy;
 	sprintf(tempstring, "%s", new_scrmode.full ? "Fullscreen" : "Windowed");
@@ -1197,8 +1220,8 @@ static void M_ResOptDrawer(style_c *style, int topy, int bottomy, int dy, int ce
 
 	y += dy;
 
-	sprintf(tempstring, "%d x %d at %d-bit %s",
-		SCREENWIDTH, SCREENHEIGHT, (SCREENBITS < 20) ? 16 : 32,
+	sprintf(tempstring, "%d x %d %s",
+		SCREENWIDTH, SCREENHEIGHT,
 		FULLSCREEN ? "Fullscreen" : "Windowed");
 
 	HL_WriteText(style, 1, 160 - (style->fonts[1]->StringWidth(tempstring) / 2), y, tempstring);
@@ -1260,7 +1283,7 @@ bool M_OptResponder(event_t * ev, int ch)
 
 		keyscan = 0;
 
-		if (ch == KEYD_ESCAPE)
+		if (ch == KEYD_ESCAPE || ch == KEYD_JOY2)
 			return true;
 
 		blah = (int*)(curr_item->switchvar);
@@ -1299,6 +1322,8 @@ bool M_OptResponder(event_t * ev, int ch)
 
 	case KEYD_DOWNARROW:
 	case KEYD_WHEEL_DN:
+	case KEYD_JOY13:
+
 	{
 		do
 		{
@@ -1314,6 +1339,7 @@ bool M_OptResponder(event_t * ev, int ch)
 
 	case KEYD_UPARROW:
 	case KEYD_WHEEL_UP:
+	case KEYD_JOY12:
 	{
 		do
 		{
@@ -1328,6 +1354,7 @@ bool M_OptResponder(event_t * ev, int ch)
 	}
 
 	case KEYD_LEFTARROW:
+	case KEYD_JOY14:
 	{
 		if (curr_menu->key_page[0])
 		{
@@ -1560,14 +1587,14 @@ static void M_AdvancedOptions(int keypressed)
 
 static void M_DebugMenu(int keypressed)
 {
-	if (heretic_mode)
-	{
-		curr_menu = &debug_optmenu;
-	}
-	else
-	{
-		curr_menu = &debug_optmenu;
-	}
+	curr_menu = &debug_optmenu;
+
+	curr_item = curr_menu->items + curr_menu->pos;
+}
+
+static void M_StartupMenu(int keypressed)
+{
+	curr_menu = &startup_optmenu;
 
 	curr_item = curr_menu->items + curr_menu->pos;
 }
@@ -1585,7 +1612,6 @@ static void M_ResolutionOptions(int keypressed)
 {
 	new_scrmode.width = SCREENWIDTH;
 	new_scrmode.height = SCREENHEIGHT;
-	new_scrmode.depth = SCREENBITS;
 	new_scrmode.full = FULLSCREEN;
 
 	if (heretic_mode)
@@ -1896,7 +1922,7 @@ static void M_ChangeHUDTextScale(int keypressed)
 	float scale;
 
 	{
-		scale = CLAMP(0, r_textscale.f, 2); //from 0.1f -> 2.0f
+		scale = CLAMP(0, r_textscale, 2); //from 0.1f -> 2.0f
 		HUD_SetScale(scale);
 	}
 
@@ -1998,21 +2024,21 @@ static void M_OptionSetResolution(int keypressed)
 {
 	if (R_ChangeResolution(&new_scrmode))
 	{
-		RGL_StopWipe();  // delete any wipe texture too
+		//RGL_StopWipe();  // delete any wipe texture too
 
-		W_DeleteAllImages();
+		//W_DeleteAllImages();
 
-		HUD_Reset();
+		//HUD_Reset();
 
-		RGL_Init();
+		//RGL_Init();
 		R_SoftInitResolution();
-		//FGLRenderBuffers* renderbuffers = FGLRenderBuffers::Instance(); //Recreates the HUD 
+		//FGLRenderBuffers* renderbuffers = FGLRenderBuffers::Instance(); //Recreates the HUD
 	}
 	else
 	{
 		std::string msg(epi::STR_Format(language["ModeSelErr"],
 			new_scrmode.width, new_scrmode.height,
-			(new_scrmode.depth < 20) ? 16 : 32));
+			0));
 
 		M_StartMessage(msg.c_str(), NULL, false);
 
@@ -2065,9 +2091,9 @@ void M_Options(int choice)
 	option_menuon = 1;
 
 	// hack
-	menu_crosshair = CLAMP(0, r_crosshair.d, 9);
+	menu_crosshair = CLAMP(0, r_crosshair, 9);
 
-	menu_crosshair2 = CLAMP(0, r_crosssize.f, 15);
+	menu_crosshair2 = CLAMP(0, r_crosssize, 15);
 
 	// continued
 }

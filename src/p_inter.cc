@@ -41,9 +41,11 @@
 
 #define DAMAGE_ADD_MIN  3
 #define DAMAGE_LIMIT  100
-
-extern cvar_c m_tactile;
-extern cvar_c melee_tactile;
+/*
+DEF_CVAR(m_tactile, int, "c", 1);
+DEF_CVAR(melee_tactile, int, "c", 0);*/
+extern int m_tactile;
+extern int melee_tactile;
 bool var_obituaries = true;
 
 
@@ -1017,6 +1019,10 @@ void P_DamageMobj(mobj_t * target, mobj_t * inflictor, mobj_t * source,
 		return;
 	}
 
+	// check for immortality
+	if (target->hyperflags & HF_IMMORTAL)
+		damage = 0.0f; //do no damage
+
 	// check for partial resistance against the attack
 	if (!weak_spot && damage >= 0.1f && inflictor && inflictor->currentattack &&
 		BITSET_EMPTY == (inflictor->currentattack->attack_class & ~target->info->resistance))
@@ -1159,6 +1165,9 @@ void P_DamageMobj(mobj_t * target, mobj_t * inflictor, mobj_t * source,
 		// add damage after armour / invuln detection
 		if (damage > 0)
 		{
+			// 6.20.21 ~CA: 
+			// Cancel out teleport effect (fixes stuck telept_fov)
+			player->telept_fov = 0;
 			player->damagecount += (int)MAX(damage, DAMAGE_ADD_MIN);
 			player->damage_pain += damage;
 		}
@@ -1171,7 +1180,7 @@ void P_DamageMobj(mobj_t * target, mobj_t * inflictor, mobj_t * source,
         int temp = damage < DAMAGE_LIMIT ? damage : DAMAGE_LIMIT;
 
 		//TODO: Move into COAL (PL_add_tactile)
-		if (m_tactile.d > 0)
+		if (m_tactile > 0)
 		I_Tactile(5, (1 + (temp >> 4)) * 10, player->pnum);
 	}
 

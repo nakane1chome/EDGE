@@ -49,16 +49,17 @@ extern int light_color;
 extern int fade_color;
 #endif
 
-cvar_c r_colorlighting;
-cvar_c r_colormaterial;
+DEF_CVAR(r_colorlighting, int, "", 1);
+DEF_CVAR(r_colormaterial, int, "", 1);
 
-cvar_c r_dumbsky;
-cvar_c r_dumbmulti;
-cvar_c r_dumbcombine;
-cvar_c r_dumbclamp;
-cvar_c r_anisotropy;
+DEF_CVAR(r_dumbsky, int, "", 0);
+DEF_CVAR(r_dumbmulti, int, "", 0);
+DEF_CVAR(r_dumbcombine, int, "", 0);
+DEF_CVAR(r_dumbclamp, int, "", 0);
 
-cvar_c r_gl3_path;
+DEF_CVAR(r_anisotropy, int, "c", 0);
+
+DEF_CVAR(r_gl3_path, int, "c", 0);
 
 static bump_map_shader bmap_shader;
 
@@ -68,11 +69,12 @@ const image_c* tmp_image_normal;
 const image_c* tmp_image_specular;
 static bool tmp_init=false;
 */
-static int bmap_light_count=0;
+static int bmap_light_count = 0;
 
 
-#define MAX_L_VERT  16384  //old vert limit, was not enough for particular md5 models
-///#define MAX_L_VERT 4096 //(might have to change this so it does not affect MD2/MD3 loading? )
+//XXX ~CA
+//"4096" was the previous default, changed for MD5 model support!
+#define MAX_L_VERT  16384  
 
 
 #define MAX_L_UNIT  (MAX_L_VERT / 4)
@@ -111,50 +113,50 @@ local_gl_unit_t;
 static local_gl_vert_t local_verts[MAX_L_VERT];
 static local_gl_unit_t local_units[MAX_L_UNIT];
 
-static std::vector<local_gl_unit_t *> local_unit_map;
+static std::vector<local_gl_unit_t*> local_unit_map;
 
 static int cur_vert;
 static int cur_unit;
 
 static bool batch_sort;
 
-bool RGL_GL3Enabled() 
+bool RGL_GL3Enabled()
 {
-	return (r_gl3_path.d && bmap_shader.supported());
+	return (r_gl3_path && bmap_shader.supported());
 }
 
-void RGL_SetAmbientLight(short r,short g,short b) 
+void RGL_SetAmbientLight(short r, short g, short b)
 {	//rgb 0-255
-	bmap_shader.lightParamAmbient((float)r/255.0f,(float)g/255.0f,(float)b/255.0f);
+	bmap_shader.lightParamAmbient((float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f);
 }
-void RGL_ClearLights() 
+void RGL_ClearLights()
 {
-	if(!RGL_GL3Enabled()) 
+	if (!RGL_GL3Enabled())
 
 	{
 		return;
 	}
 
-	for(int i=0;i<bmap_light_count;i++)
+	for (int i = 0; i < bmap_light_count; i++)
 
 	{
 		bmap_shader.lightDisable(i);
 	}
 
-	bmap_light_count=0;
+	bmap_light_count = 0;
 }
-void RGL_AddLight(mobj_t* mo) 
+void RGL_AddLight(mobj_t* mo)
 {
 	bmap_shader.lightParam(bmap_light_count,
-			mo->x,mo->y,mo->z,
-			(float)RGB_RED(mo->dlight.color)/256.0f,
-			(float)RGB_BLU(mo->dlight.color)/256.0f,
-			(float)RGB_GRN(mo->dlight.color)/256.0f,
-			mo->dlight.r);
+		mo->x, mo->y, mo->z,
+		(float)RGB_RED(mo->dlight.color) / 256.0f,
+		(float)RGB_BLU(mo->dlight.color) / 256.0f,
+		(float)RGB_GRN(mo->dlight.color) / 256.0f,
+		mo->dlight.r);
 
 	bmap_light_count++;
 }
-void RGL_CaptureCameraMatrix() 
+void RGL_CaptureCameraMatrix()
 {
 	float cam_matrix[16];
 	glGetFloatv(GL_MODELVIEW_MATRIX, cam_matrix);
@@ -215,7 +217,7 @@ static inline void myActiveTexture(GLuint id)
 {
 #ifndef DREAMCAST
 	//if (GLEW_VERSION_1_3)
-		glActiveTexture(id);
+	glActiveTexture(id);
 	//else /* GLEW_ARB_multitexture */
 	//	glActiveTextureARB(id);
 #endif
@@ -223,9 +225,9 @@ static inline void myActiveTexture(GLuint id)
 
 static inline void myMultiTexCoord2f(GLuint id, GLfloat s, GLfloat t)
 {
-//#ifndef DREAMCAST
-	//if (GLEW_VERSION_1_3)
-		glMultiTexCoord2f(id, s, t);
+	//#ifndef DREAMCAST
+		//if (GLEW_VERSION_1_3)
+	glMultiTexCoord2f(id, s, t);
 	//else /* GLEW_ARB_multitexture */
 	//	glMultiTexCoord2fARB(id, s, t);
 //#endif
@@ -241,12 +243,12 @@ static inline void myMultiTexCoord2f(GLuint id, GLfloat s, GLfloat t)
 // contains "holes" (like sprites).  `blended' should be true if the
 // texture should be blended (like for translucent water or sprites).
 //
-local_gl_vert_t *RGL_BeginUnit(GLuint shape, int max_vert,
-		                       GLuint env1, GLuint tex1,
-							   GLuint env2, GLuint tex2,
-							   int pass, int blending)
+local_gl_vert_t* RGL_BeginUnit(GLuint shape, int max_vert,
+	GLuint env1, GLuint tex1,
+	GLuint env2, GLuint tex2,
+	int pass, int blending)
 {
-	local_gl_unit_t *unit;
+	local_gl_unit_t* unit;
 
 	SYS_ASSERT(max_vert > 0);
 	SYS_ASSERT(pass >= 0);
@@ -264,25 +266,25 @@ local_gl_vert_t *RGL_BeginUnit(GLuint shape, int max_vert,
 	if (env1 == ENV_NONE) tex1 = 0;
 	if (env2 == ENV_NONE) tex2 = 0;
 
-	unit->shape  = shape;
+	unit->shape = shape;
 	unit->env[0] = env1;
 	unit->env[1] = env2;
 	unit->tex[0] = tex1;
 	unit->tex[1] = tex2;
-	unit->tex_normal=0;
-	unit->tex_specular=0;
+	unit->tex_normal = 0;
+	unit->tex_specular = 0;
 
-	unit->pass     = pass;
+	unit->pass = pass;
 	unit->blending = blending;
-	unit->first    = cur_vert;  // count set later
+	unit->first = cur_vert;  // count set later
 
 	return local_verts + cur_vert;
 }
-void RGL_SetUnitMaps(GLuint tex_normal,GLuint tex_specular) 
+void RGL_SetUnitMaps(GLuint tex_normal, GLuint tex_specular)
 {
-	local_gl_unit_t *unit=local_units + cur_unit;
-	unit->tex_normal=tex_normal;
-	unit->tex_specular=tex_specular;
+	local_gl_unit_t* unit = local_units + cur_unit;
+	unit->tex_normal = tex_normal;
+	unit->tex_specular = tex_specular;
 }
 
 //
@@ -290,10 +292,10 @@ void RGL_SetUnitMaps(GLuint tex_normal,GLuint tex_specular)
 //
 void RGL_EndUnit(int actual_vert)
 {
-	local_gl_unit_t *unit;
+	local_gl_unit_t* unit;
 
 	SYS_ASSERT(actual_vert > 0);
-	SYS_ASSERT(cur_unit<MAX_L_UNIT);
+	SYS_ASSERT(cur_unit < MAX_L_UNIT);
 
 	unit = local_units + cur_unit;
 
@@ -302,7 +304,7 @@ void RGL_EndUnit(int actual_vert)
 	// adjust colors (for special effects)
 	for (int i = 0; i < actual_vert; i++)
 	{
-		local_gl_vert_t *v = &local_verts[cur_vert + i];
+		local_gl_vert_t* v = &local_verts[cur_vert + i];
 
 		v->rgba[0] *= ren_red_mul;
 		v->rgba[1] *= ren_grn_mul;
@@ -321,7 +323,7 @@ void RGL_EndUnit(int actual_vert)
 
 struct Compare_Unit_pred
 {
-	inline bool operator() (const local_gl_unit_t *A, const local_gl_unit_t *B) const
+	inline bool operator() (const local_gl_unit_t* A, const local_gl_unit_t* B) const
 	{
 		if (A->pass != B->pass)
 			return A->pass < B->pass;
@@ -347,31 +349,31 @@ static void EnableCustomEnv(GLuint env, bool enable)
 #ifndef DREAMCAST
 	switch (env)
 	{
-		case ENV_SKIP_RGB:
-			if (enable)
-			{
-				glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-				glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE);
-				glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PREVIOUS);
-			}
-			else
-			{
-				/* no need to modify TEXTURE_ENV_MODE */
-				glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
-				glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_TEXTURE);
-			}
-			break;
+	case ENV_SKIP_RGB:
+		if (enable)
+		{
+			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+			glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE);
+			glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PREVIOUS);
+		}
+		else
+		{
+			/* no need to modify TEXTURE_ENV_MODE */
+			glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+			glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_TEXTURE);
+		}
+		break;
 
-		default:
-			I_Error("INTERNAL ERROR: no such custom env: %08x\n", env);
+	default:
+		I_Error("INTERNAL ERROR: no such custom env: %08x\n", env);
 	}
 #endif
 }
 
-static inline void RGL_SendRawVector(const local_gl_vert_t *V)
+static inline void RGL_SendRawVector(const local_gl_vert_t* V)
 {
 #ifndef DREAMCAST
-	if (r_colormaterial.d || ! r_colorlighting.d) {
+	if (r_colormaterial || !r_colorlighting) {
 		glColor4fv(V->rgba);
 	}
 	else
@@ -394,11 +396,11 @@ static inline void RGL_SendRawVector(const local_gl_vert_t *V)
 	glVertex3f(V->pos.x, V->pos.y, V->pos.z);
 }
 //also sends tangent
-static inline void RGL_SendRawVector2(const local_gl_vert_t *V)
+static inline void RGL_SendRawVector2(const local_gl_vert_t* V)
 {
-	/*
+
 #ifndef DREAMCAST
-	if (r_colormaterial.d || ! r_colorlighting.d) {
+	if (r_colormaterial || ! r_colorlighting) {
 		glColor4fv(V->rgba);
 	}
 	else
@@ -409,44 +411,46 @@ static inline void RGL_SendRawVector2(const local_gl_vert_t *V)
 #else
 	glColor4fv(V->rgba);
 #endif
-*/
+
 	myMultiTexCoord2f(GL_TEXTURE0, V->texc[0].x, V->texc[0].y);
-//	myMultiTexCoord2f(GL_TEXTURE1, V->texc[1].x, V->texc[1].y);
+	//XXX TODO:: NOTE:: FIXME ::
+	//!!!: CA: myMultiTexCoord2f ->  (GL_TEXTURE1 line) *used* to be disabled!
+	myMultiTexCoord2f(GL_TEXTURE1, V->texc[1].x, V->texc[1].y);
 
 	glNormal3f(V->normal.x, V->normal.y, V->normal.z);
 #ifndef NO_EDGEFLAG
 	glEdgeFlag(V->edge);
 #endif
 
-	glVertexAttrib3f(bmap_shader.attr_tan,V->tangent.x,V->tangent.y,V->tangent.z);
+	glVertexAttrib3f(bmap_shader.attr_tan, V->tangent.x, V->tangent.y, V->tangent.z);
 
 	// vertex must be last
 	glVertex3f(V->pos.x, V->pos.y, V->pos.z);
 }
 
-void calc_tan(local_gl_vert_t* v1,local_gl_vert_t* v2,local_gl_vert_t* v3) 
+void calc_tan(local_gl_vert_t* v1, local_gl_vert_t* v2, local_gl_vert_t* v3)
 {
 	vec2_t d_uv1;
 	vec2_t d_uv2;
 	vec3_t d_pos1;
 	vec3_t d_pos2;
 
-	d_uv1.x=v2->texc[0].x-v1->texc[0].x;
-	d_uv1.y=v2->texc[0].y-v1->texc[0].y;
-	d_uv2.x=v3->texc[0].x-v1->texc[0].x;
-	d_uv2.y=v3->texc[0].y-v1->texc[0].y;
+	d_uv1.x = v2->texc[0].x - v1->texc[0].x;
+	d_uv1.y = v2->texc[0].y - v1->texc[0].y;
+	d_uv2.x = v3->texc[0].x - v1->texc[0].x;
+	d_uv2.y = v3->texc[0].y - v1->texc[0].y;
 
-	d_pos1.x=v2->pos.x-v1->pos.x;
-	d_pos1.y=v2->pos.y-v1->pos.y;
-	d_pos1.z=v2->pos.z-v1->pos.z;
-	d_pos2.x=v3->pos.x-v1->pos.x;
-	d_pos2.y=v3->pos.y-v1->pos.y;
-	d_pos2.z=v3->pos.z-v1->pos.z;
+	d_pos1.x = v2->pos.x - v1->pos.x;
+	d_pos1.y = v2->pos.y - v1->pos.y;
+	d_pos1.z = v2->pos.z - v1->pos.z;
+	d_pos2.x = v3->pos.x - v1->pos.x;
+	d_pos2.y = v3->pos.y - v1->pos.y;
+	d_pos2.z = v3->pos.z - v1->pos.z;
 
 	float r = 1.0f / (d_uv1.x * d_uv2.y - d_uv1.y * d_uv2.x);
-	v1->tangent.x= r*( d_pos1.x * d_uv2.y - d_pos2.x * d_uv1.y );
-	v1->tangent.y= r*( d_pos1.y * d_uv2.y - d_pos2.y * d_uv1.y );
-	v1->tangent.z= r*( d_pos1.z * d_uv2.y - d_pos2.z * d_uv1.y );
+	v1->tangent.x = r * (d_pos1.x * d_uv2.y - d_pos2.x * d_uv1.y);
+	v1->tangent.y = r * (d_pos1.y * d_uv2.y - d_pos2.y * d_uv1.y);
+	v1->tangent.z = r * (d_pos1.z * d_uv2.y - d_pos2.z * d_uv1.y);
 }
 
 // Only open/close a glBegin/glEnd if needed
@@ -483,14 +487,14 @@ void RGL_DrawUnits(void)
 	int active_pass = 0;
 	int active_blending = 0;
 
-	for (int i=0; i < cur_unit; i++)
-		local_unit_map[i] = & local_units[i];
+	for (int i = 0; i < cur_unit; i++)
+		local_unit_map[i] = &local_units[i];
 
 	if (batch_sort)
 	{
 		std::sort(local_unit_map.begin(),
-				  local_unit_map.begin() + cur_unit,
-				  Compare_Unit_pred());
+			local_unit_map.begin() + cur_unit,
+			Compare_Unit_pred());
 	}
 
 	glDisable(GL_TEXTURE_2D);
@@ -511,7 +515,7 @@ void RGL_DrawUnits(void)
 		fog_col[2] = (float)RGB_BLU(fade_color) / 255.0f;
 		fog_col[3] = 1.0f;
 
-		glClearColor(0.5f,0.5f,0.5f,1.0f);   // We'll Clear To The Color Of The Fog ( Modified )
+		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);   // We'll Clear To The Color Of The Fog ( Modified )
 		glFogi(GL_FOG_MODE, GL_EXP2);        // Fog Mode
 		glFogf(GL_FOG_DENSITY, 0.002f);      // How Dense Will The Fog Be
 		glFogfv(GL_FOG_COLOR, fog_col);      // Set Fog Color
@@ -522,9 +526,9 @@ void RGL_DrawUnits(void)
 	}
 #endif
 
-	for (int j=0; j < cur_unit; j++)
+	for (int j = 0; j < cur_unit; j++)
 	{
-		local_gl_unit_t *unit = local_unit_map[j];
+		local_gl_unit_t* unit = local_unit_map[j];
 
 		SYS_ASSERT(unit->count > 0);
 
@@ -601,7 +605,7 @@ void RGL_DrawUnits(void)
 			glAlphaFunc(GL_GREATER, a * 0.66f);
 		}
 
-		for (int t=1; t >= 0; t--)
+		for (int t = 1; t >= 0; t--)
 		{
 			if (active_tex[t] != unit->tex[t] || active_env[t] != unit->env[t])
 			{
@@ -649,12 +653,12 @@ void RGL_DrawUnits(void)
 			RGL_BatchShape(0);
 			glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, &old_clamp);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-				r_dumbclamp.d ? GL_CLAMP : GL_CLAMP_TO_EDGE);
+				r_dumbclamp ? GL_CLAMP : GL_CLAMP_TO_EDGE);
 		}
 
 
 		//disable if unit has multiple textures (level geometry lightmap for instance)
-		if(RGL_GL3Enabled() && unit->tex[1]==0) 
+		if (RGL_GL3Enabled() && unit->tex[1] == 0)
 		{
 			RGL_BatchShape(0);
 
@@ -662,36 +666,37 @@ void RGL_DrawUnits(void)
 			bmap_shader.bind();
 			bmap_shader.lightApply();
 
-			myActiveTexture(GL_TEXTURE0+2);
-			glBindTexture(GL_TEXTURE_2D, (unit->tex_specular!=0 ? unit->tex_specular : bmap_shader.tex_default_specular));
-			myActiveTexture(GL_TEXTURE0+1);
-			glBindTexture(GL_TEXTURE_2D, (unit->tex_normal!=0 ? unit->tex_normal : bmap_shader.tex_default_normal));
+			myActiveTexture(GL_TEXTURE0 + 2);
+			glBindTexture(GL_TEXTURE_2D, (unit->tex_specular != 0 ? unit->tex_specular : bmap_shader.tex_default_specular));
+			myActiveTexture(GL_TEXTURE0 + 1);
+			glBindTexture(GL_TEXTURE_2D, (unit->tex_normal != 0 ? unit->tex_normal : bmap_shader.tex_default_normal));
 			myActiveTexture(GL_TEXTURE0);
 
 			//calc tangents, works for GL_TRIANGLE_STRIP
 			//TODO: don't re-calc every frame
-			if(unit->shape==GL_TRIANGLE_STRIP) 
+			if (unit->shape == GL_TRIANGLE_STRIP)
 			{
-				for(int v_idx=0;v_idx<unit->count-2;v_idx+=3) 
+				for (int v_idx = 0; v_idx < unit->count - 2; v_idx += 3)
 				{
-					local_gl_vert_t* v=local_verts+unit->first+v_idx;
-					calc_tan(v+0,v+1,v+2);
-					calc_tan(v+1,v+2,v+0);
-					calc_tan(v+2,v+0,v+1);
+					local_gl_vert_t* v = local_verts + unit->first + v_idx;
+					calc_tan(v + 0, v + 1, v + 2);
+					calc_tan(v + 1, v + 2, v + 0);
+					calc_tan(v + 2, v + 0, v + 1);
 				}
 			}
 
+			RGL_BatchShape(unit->shape);
 			glBegin(unit->shape);
-			if(bmap_shader.attr_tan!=-1) 
+			if (bmap_shader.attr_tan != -1)
 			{
-				for (int v_idx=0; v_idx < unit->count; v_idx++)
+				for (int v_idx = 0; v_idx < unit->count; v_idx++)
 				{
 					RGL_SendRawVector2(local_verts + unit->first + v_idx);
 				}
 			}
-			else 
+			else
 			{
-				for (int v_idx=0; v_idx < unit->count; v_idx++)
+				for (int v_idx = 0; v_idx < unit->count; v_idx++)
 				{
 					RGL_SendRawVector(local_verts + unit->first + v_idx);
 				}
@@ -701,30 +706,33 @@ void RGL_DrawUnits(void)
 
 			bmap_shader.unbind();
 
+
 #ifdef DEBUG_GL3
 			//bmap_shader.debugDrawLights();
 			//XXX normals and tangent debug
-			/*
+
 			glBegin(GL_LINES);
-			for(int i=0;i<unit->count;i++) {
-				local_gl_vert_t* v=local_verts+unit->first+i;
+			for (int i = 0; i < unit->count; i++) {
+				local_gl_vert_t* v = local_verts + unit->first + i;
 
-				float s=1.0;
-				glColor3f(1,0,0);
-				glVertex3f(v->pos.x,v->pos.y,v->pos.z);
-				glVertex3f(v->pos.x+v->tangent.x*s,v->pos.y+v->tangent.y*s,v->pos.z+v->tangent.z*s);
+				float s = 1.0;
+				glColor3f(1, 0, 0);
+				glVertex3f(v->pos.x, v->pos.y, v->pos.z);
+				glVertex3f(v->pos.x + v->tangent.x * s, v->pos.y + v->tangent.y * s, v->pos.z + v->tangent.z * s);
 
-				glColor3f(0,0,1);
-				s=1.0;
-				glVertex3f(v->pos.x,v->pos.y,v->pos.z);
-				glVertex3f(v->pos.x+v->normal.x*s,v->pos.y+v->normal.y*s,v->pos.z+v->normal.z*s);
+				glColor3f(0, 0, 1);
+				s = 1.0;
+				glVertex3f(v->pos.x, v->pos.y, v->pos.z);
+				glVertex3f(v->pos.x + v->normal.x * s, v->pos.y + v->normal.y * s, v->pos.z + v->normal.z * s);
 			}
 			glEnd();
-			*/
-#endif
+
+#endif  
+
+
 
 		}
-		else 
+		else
 		{
 			// Simplify things into triangles as that allows us to keep a single glBegin open for longer
 			if (unit->shape == GL_POLYGON || unit->shape == GL_TRIANGLE_FAN)
@@ -782,7 +790,7 @@ void RGL_DrawUnits(void)
 
 	glPolygonOffset(0, 0);
 
-	for (int t=1; t >=0; t--)
+	for (int t = 1; t >= 0; t--)
 	{
 		myActiveTexture(GL_TEXTURE0 + t);
 

@@ -19,12 +19,6 @@
 #include "i_defs.h"
 #include "i_defs_gl.h"
 
-#ifdef WIN32
-#include "opengl/gledge_wgl.h"
-//#define WGL_WGLEXT_PROTOTYPES 1
-PFNWGLSWAPINTERVALEXTPROC myWglSwapIntervalExtProc;
-#endif
-
 #include "i_sdlinc.h"
 
 #include <signal.h>
@@ -38,7 +32,7 @@ PFNWGLSWAPINTERVALEXTPROC myWglSwapIntervalExtProc;
 SDL_version compiled;
 SDL_version linked;
 
-extern cvar_c r_width, r_height, r_depth, r_fullscreen, r_vsync, r_anisotropy;
+extern int r_vsync, r_anisotropy;
 
 //The window we'll be rendering to
 SDL_Window *my_vis;
@@ -47,9 +41,9 @@ SDL_Renderer *my_rndrr;
 
 int graphics_shutdown = 0;
 
-cvar_c in_grab;
+DEF_CVAR(in_grab, int, "c", 1);
 
-cvar_c r_swapinterval;
+DEF_CVAR(r_swapinterval, int, "", 1);
 
 static bool grab_state;
 
@@ -57,14 +51,11 @@ static int display_W, display_H;
 
 SDL_GLContext   glContext;
 
-
-#ifdef GL_BRIGHTNESS
 float gamma_settings = 0.0f;
 float fade_gamma;
 float fade_gdelta;
 extern int fade_starttic;
 extern bool fade_active;
-#endif
 
 // Possible Windowed Modes
 static struct { int w, h; } possible_modes[] =
@@ -99,7 +90,7 @@ void I_GrabCursor(bool enable)
 
 	grab_state = enable;
 
-	if (grab_state && in_grab.d)
+	if (grab_state && in_grab)
 	{
 		SDL_ShowCursor(SDL_FALSE);
 		SDL_SetRelativeMouseMode(SDL_TRUE);
@@ -160,17 +151,20 @@ void I_StartupGraphics(void)
 	if (M_CheckParm("-nograb"))
 		in_grab = 0;
 
+#if 0
 	// anti-aliasing
-	if (r_anisotropy.d > 1)
+	if (r_anisotropy > 1)
 	{
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 4);
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, r_anisotropy.d);
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, r_anisotropy);
 	}
-	else 
+	else
 	{
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
 	}
+
+#endif // 0
 
 	SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
 	SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
@@ -180,14 +174,14 @@ void I_StartupGraphics(void)
 	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,    8);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,   16);
-//	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 2);
-
 	// ~CA 5.7.2016:
 
-	flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS | SDL_WINDOW_INPUT_FOCUS;
+	flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_INPUT_FOCUS;
 
 	display_W = SCREENWIDTH;
 	display_H = SCREENHEIGHT;
+
+
 
 	sprintf(title, "EDGE");
     my_vis = SDL_CreateWindow(title,
@@ -196,7 +190,8 @@ void I_StartupGraphics(void)
                               display_W,
                               display_H,
                               flags);
-	my_rndrr = SDL_CreateRenderer(my_vis, -1, SDL_RENDERER_TARGETTEXTURE);
+
+	my_rndrr = SDL_CreateRenderer(my_vis, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
 	glContext = SDL_GL_CreateContext( my_vis );
 
@@ -206,6 +201,12 @@ void I_StartupGraphics(void)
         I_Error("I_InitScreen: Failed to create window");
         return;
     }
+
+	if (r_vsync == 1 && r_swapinterval == 0)
+		SDL_GL_SetSwapInterval(1);		// SDL-based standard
+	else if (r_vsync == 1 && r_swapinterval == 1)
+		SDL_GL_SetSwapInterval(-1);
+
 
 	static bool first = true;
 
@@ -233,17 +234,12 @@ void I_StartupGraphics(void)
 			scrmode_c scr_mode;
 			scr_mode.width = mode.w;
 			scr_mode.height = mode.h;
-			scr_mode.depth = SDL_BITSPERPIXEL(mode.format);
 			scr_mode.full = true;
 
 			if ((scr_mode.width & 15) != 0)
 				continue;
 
-			if (scr_mode.depth == 15 || scr_mode.depth == 16 ||
-				scr_mode.depth == 24 || scr_mode.depth == 32)
-			{
-				R_AddResolution(&scr_mode);
-			}
+            R_AddResolution(&scr_mode);
 		}
 	}
 
@@ -256,7 +252,6 @@ void I_StartupGraphics(void)
 			scrmode_c scr_mode;
 			scr_mode.width = possible_modes[i].w;
 			scr_mode.height = possible_modes[i].h;
-			scr_mode.depth = SDL_BITSPERPIXEL(mode.format);
 			scr_mode.full = false;
 
 			if (scr_mode.width <= mode.w && scr_mode.height <= mode.h)
@@ -282,65 +277,54 @@ void I_StartupGraphics(void)
 
 bool I_SetScreenSize(scrmode_c *mode)
 {
-	I_Printf("I_SetScreenSize = reached\n");
-	I_GrabCursor(false);
+ 	I_Printf("I_SetScreenSize: trying %dx%d (%s)\n",
+ 			 mode->width, mode->height,
+ 			 mode->full ? "fullscreen" : "windowed");
 
-	SDL_GL_DeleteContext(glContext);
-	SDL_DestroyRenderer(my_rndrr);
-	SDL_DestroyWindow(my_vis);
+ 	// -AJA- turn off cursor -- BIG performance increase.
+ 	//       Plus, the combination of no-cursor + grab gives
+ 	//       continuous relative mouse motion.
 
-	I_Printf("I_SetScreenSize: trying %dx%d %dbpp (%s)\n",
-			 mode->width, mode->height, mode->depth,
-			 mode->full ? "fullscreen" : "windowed");
+ 	// ~CA~  TODO:  Eventually we will want to turn on the cursor
+ 	//				when we get Doom64-style mouse control for
+ 	//				the options drawer.
+ 	I_GrabCursor(false);
 
-	my_vis = SDL_CreateWindow("EDGE",
-		SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED,
-                    mode->width, mode->height,
-                    SDL_WINDOW_OPENGL | //SDL2 is double-buffered by default
-                    (mode->full ? SDL_WINDOW_FULLSCREEN :0));
+// 	    // reset gamma to default
+//         I_SetGamma(1.0f);
 
-	my_rndrr = SDL_CreateRenderer(my_vis, -1, SDL_RENDERER_ACCELERATED);
+	SDL_DisplayMode dm;
+	memset(&dm, 0, sizeof(dm));
+	dm.format = SDL_PIXELFORMAT_RGBA8888; // TODO: set proper pixel format
+	dm.w = mode->width;
+	dm.h = mode->height;
 
-	glContext = SDL_GL_CreateContext( my_vis );
-
-    SDL_GL_MakeCurrent( my_vis, glContext );
-	HUD_Reset(); // Make doubly sure the HUD module is reset to counter the 640x480 white-box ghosting bug upon mode change.
-
-	if (my_vis == NULL)
-	{
-		I_Printf("I_SetScreenSize: (mode not possible)\n");
-		return false;
+	if(SDL_SetWindowDisplayMode(my_vis, &dm) != 0) {
+        I_Printf("I_SetScreenSize: failed to set video mode: %s\n", SDL_GetError());
+        return false;
 	}
+	SDL_SetWindowFullscreen(my_vis, mode->full ? SDL_WINDOW_FULLSCREEN : 0);
+    if(!mode->full) {
+        SDL_SetWindowSize(my_vis, mode->width, mode->height);
+        SDL_SetWindowPosition(my_vis, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    }
 
-	//if (r_vsync.d == 1)
-	//	SDL_GL_SetSwapInterval(1);
-	//else
-		//SDL_GL_SetSwapInterval(-1);
+    if (r_vsync == 1 && r_swapinterval == 0)
+        SDL_GL_SetSwapInterval(1);		// SDL-based standard
+    else if (r_vsync == 1 && r_swapinterval == 1)
+        SDL_GL_SetSwapInterval(-1);
 
-	// -AJA- turn off cursor -- BIG performance increase.
-	//       Plus, the combination of no-cursor + grab gives
-	//       continuous relative mouse motion.
-
-	// ~CA~  TODO:  Eventually we will want to turn on the cursor
-	//				when we get Doom64-style mouse control for
-	//				the options drawer.
 	I_GrabCursor(false);
 
-	glClearColor(0, 0, 0, 0);
-	glClear(GL_COLOR_BUFFER_BIT);
-
-#ifdef MACOSX
-	//TODO: On Mac OS X make sure to bind 0 to the draw framebuffer before swapping the window, otherwise nothing will happen.
-#endif
-	SDL_GL_SwapWindow(my_vis);
-
+	//HUD_Reset();
 	return true;
 }
 
 
 void I_StartFrame(void)
 {
+	// CA 11/17/19:
+	// This wasn't needed here except for the letterboxing (this is mostly for image "borders"), so we need a better method. For now disabling this helps rendering overall.
 	glClearColor(0, 0, 0, 0);
 	glClear(GL_COLOR_BUFFER_BIT);
 }
@@ -348,7 +332,6 @@ void I_StartFrame(void)
 
 void I_FinishFrame(void)
 {
-	extern cvar_c r_vsync;
 
 #ifdef GL_BRIGHTNESS
 	glEnable(GL_BLEND);
@@ -359,22 +342,16 @@ void I_FinishFrame(void)
 		fade_active ? 0.0f : 1.0f,
 		fade_active ? 1.0f - fade_gamma : gamma_settings);
 	glVertex3i(0, 0, 0);
-	glVertex3i(display_W, 0, 0);
-	glVertex3i(display_W, display_H, 0);
-	glVertex3i(0, display_H, 0);
+	glVertex3i(SCREENWIDTH, 0, 0);
+	glVertex3i(SCREENWIDTH, SCREENHEIGHT, 0);
+	glVertex3i(0, SCREENHEIGHT, 0);
 	glEnd();
 	glColor4f(1, 1, 1, 1);
 #endif
 
 
-	if (r_vsync.d > 0)
+	if (r_vsync > 0)
 		glFinish();
-
-	// I wonder if SDL_GL_SwapWindow is working properly (?)
-#ifdef WIN32
-		if (myWglSwapIntervalExtProc)
-			myWglSwapIntervalExtProc(r_vsync.d != 0);
-#endif
 
 	/* 	Some systems allow specifying -1 for the interval,
 	to enable late swap tearing. Late swap tearing works
@@ -386,24 +363,10 @@ void I_FinishFrame(void)
 	it, this function will fail and return -1. In such a case,
 	you should probably retry the call with 1 for the interval. */
 
-#ifdef _WIN32
-	if (WGL_EXT_swap_control)
-	{
-		if (myWglSwapIntervalExtProc)
-			if (r_vsync.d == 1 && r_swapinterval.d == 0)
-				myWglSwapIntervalExtProc(1);
-			else if (r_vsync.d == 1 && r_swapinterval.d == 1)
-				myWglSwapIntervalExtProc(-1);
-	}
-#endif
-	if (r_vsync.d == 1 && r_swapinterval.d == 0)
-		SDL_GL_SetSwapInterval(1);		// SDL-based standard
-	else if (r_vsync.d == 1 && r_swapinterval.d == 1)
-		SDL_GL_SetSwapInterval(-1);
 
 	SDL_GL_SwapWindow(my_vis);
 
-	if (in_grab.CheckModified())
+	if (in_grab_cv_.CheckModified())
 		I_GrabCursor(grab_state);
 }
 

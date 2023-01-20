@@ -46,6 +46,7 @@
 #include "r_units.h"
 #include "w_wad.h"
 #include "z_zone.h"
+#include "defaults.h"
 
 // -AJA- 1999/06/30: added this
 byte playpal_data[14][256][3];
@@ -64,7 +65,7 @@ static bool loaded_playpal = false;
 #define RADIATION_PAL     13
 
 // -AJA- 1999/07/03: moved these here from v_res.c:
-int var_gamma;
+DEF_CVAR(r_gamma, int, "c", CFGDEF_CURRENT_GAMMA);
 
 static bool old_gamma = -1; //TODO: V786 https://www.viva64.com/en/w/v786/ It is odd that value '-1' is assigned to the 'old_gamma' variable. The value range of 'old_gamma' variable: [0, 1].
 
@@ -93,22 +94,35 @@ int pal_yellow, pal_green1, pal_brown1;
 
 static int V_FindPureColour(int which);
 
+// 9/2018: Added "strife1"
+
+//ROTT or DOOM Pallette?
+const char* palname[] = { "PAL", "PLAYPAL" };
+
 void V_InitPalette(void)
 {
 	int t, i, r, g, b, max_file, pal_lump;
 	wadtex_resource_c WT;
 
 	const byte *pal = 0;
-	const byte *rotpal = 0;
 
-	if (rott_mode)
+	I_Printf("==============================================================================\n");
+
+	for (int p_idx = 0; palname[p_idx]; p_idx++)
 	{
-		rotpal = (const byte*)W_CacheLumpName("PAL");
-		I_Printf("ROTT: Found PLAYPAL (PAL)\n");
-		return;
+		if (stricmp(palname[p_idx], "PAL") == 0)
+		{
+			I_Printf("p_idx: ROTT PLAYPAL (PAL) found\n");
+			pal = (const byte*)W_CacheLumpName("PAL");
+			break;
+		}
+		else if (stricmp(palname[p_idx], "PLAYPAL") == 0)
+		{
+			I_Printf("p_idx: PLAYPAL found\n");
+			pal = (const byte*)W_CacheLumpName("PLAYPAL");
+			break;
+		}
 	}
-	else
-		pal = (const byte*)W_CacheLumpName("PLAYPAL");
 
 	max_file = W_GetNumFiles();
 	pal_lump = -1;
@@ -127,15 +141,7 @@ void V_InitPalette(void)
 
 	if (pal_lump == -1)
 	{
-		I_Warning("Cannot find PLAYPAL, searching...\n");
-		if (rott_mode)
-		{
-			rotpal = (const byte*)W_CacheLumpNum(pal_lump);
-			I_Printf("ROTT: found PLAYPAL lump\n");
-		}
-
-		else
-			I_Error("Missing PLAYPAL palette lump !\n");
+			I_Error("V_InitPalette: Missing palette lump!\n");
 	}
 
 	// read in palette colours
@@ -143,30 +149,19 @@ void V_InitPalette(void)
 	{
 		for (i = 0; i < 256; i++)
 		{
-
-		if (rott_mode)
-		{
-			playpal_data[t][i][0] = rotpal[(t * 256 + i) * 3 + 0];
-			playpal_data[t][i][1] = rotpal[(t * 256 + i) * 3 + 1];
-			playpal_data[t][i][2] = rotpal[(t * 256 + i) * 3 + 2];
-		}
-		else
-			playpal_data[t][i][0] = pal[(t * 256 + i) * 3 + 0];
-			playpal_data[t][i][1] = pal[(t * 256 + i) * 3 + 1]; //TODO: V640 https://www.viva64.com/en/w/v640/ The code's operational logic does not correspond with its formatting. The statement is indented to the right, but it is always executed. It is possible that curly brackets are missing.
-			playpal_data[t][i][2] = pal[(t * 256 + i) * 3 + 2];
+				playpal_data[t][i][0] = pal[(t * 256 + i) * 3 + 0];
+				playpal_data[t][i][1] = pal[(t * 256 + i) * 3 + 1];
+				playpal_data[t][i][2] = pal[(t * 256 + i) * 3 + 2];
 		}
 	}
 
 	for (i = 0; i < 256; i++)
 	{
-		r = playpal_data[0][i][0];
-		g = playpal_data[0][i][1];
-		b = playpal_data[0][i][2];
+		r = playpal_data[t][i][0];
+		g = playpal_data[t][i][1];
+		b = playpal_data[t][i][2];
 	}
 
-	if (rott_mode)
-		W_DoneWithLump(rotpal);
-	else
 	W_DoneWithLump(pal);
 
 	loaded_playpal = true;
@@ -184,6 +179,7 @@ void V_InitPalette(void)
 	pal_green1 = V_FindColour(64, 128, 48);
 	pal_brown1 = V_FindColour(192, 128, 74);
 
+	
 	I_Printf("Loaded global palette.\n");
 
 	L_WriteDebug("Black:%d White:%d Red:%d Green:%d Blue:%d\n",
@@ -235,7 +231,7 @@ void V_InitColour(void)
 	const char *s = M_GetParm("-gamma");
 	if (s)
 	{
-		var_gamma = MAX(0, MIN(5, atoi(s)));
+		r_gamma = MAX(0, MIN(5, atoi(s)));
 	}
 
 	InitTranslationTables();
@@ -368,8 +364,8 @@ static void LoadColourmap(const colourmap_c * colm)
 	data = (const byte*)W_CacheLumpNum(lump);
 
 	if ((colm->start + colm->length) * 256 > size)
-		I_Error("Colourmap [%s] is too small ! (LENGTH too big)\n",
-			colm->name.c_str());
+		I_Error("Colourmap [%s] is too small ! (LENGTH too big, lump %s sz = %d)\n",
+			colm->name.c_str(), colm->lump_name.c_str(), size);
 
 	data_in = data + (colm->start * 256);
 
@@ -588,8 +584,8 @@ void V_GetColmapRGB(const colourmap_c *colmap, float *r, float *g, float *b)
 	rgbcol_t col = colmap->gl_colour;
 
 	(*r) = GAMMA_CONV((col >> 16) & 0xFF) / 255.0f;
-	(*g) = GAMMA_CONV((col >> 8) & 0xFF) / 255.0f;
-	(*b) = GAMMA_CONV((col) & 0xFF) / 255.0f;
+	(*g) = GAMMA_CONV((col >>  8) & 0xFF) / 255.0f;
+	(*b) = GAMMA_CONV((col      ) & 0xFF) / 255.0f;
 }
 
 rgbcol_t V_GetFontColor(const colourmap_c *colmap)
@@ -647,13 +643,13 @@ rgbcol_t V_ParseFontColor(const char *name, bool strict)
 //
 void V_ColourNewFrame(void)
 {
-	if (var_gamma != old_gamma)
+	if (r_gamma != old_gamma)
 	{
-		float gamma = 1.0 / (1.0 - var_gamma / 8.0);
+		float gamma = 1.0 / (1.0 - r_gamma / 8.0);
 
 		I_SetGamma(gamma);
 
-		old_gamma = var_gamma;
+		old_gamma = r_gamma;
 	}
 }
 
@@ -873,7 +869,7 @@ public:
 	{
 		local_gl_vert_t * glvert = RGL_BeginUnit(shape, num_vert,
 			GL_MODULATE, tex,
-			(desat_lev > 0.1f) ? GL_DECAL : (simple_cmap || r_dumbmulti.d) ? GL_MODULATE : GL_DECAL,
+			(desat_lev > 0.1f) ? GL_DECAL : (simple_cmap || r_dumbmulti) ? GL_MODULATE : GL_DECAL,
 			fade_tex, *pass_var, blending);
 
 		for (int v_idx = 0; v_idx < num_vert; v_idx++)
@@ -1103,14 +1099,16 @@ public:
 
 colormap_shader_c *std_cmap_shader;
 
-void R_ColorMapUpdate(int col, float desat)
+void R_ColorMapUpdate(abstract_shader_c *shader, int col, float desat)
 {
-	if (std_cmap_shader)
+	if (!shader) shader = std_cmap_shader;
+	colormap_shader_c *cmap_shader = dynamic_cast<colormap_shader_c *>(shader);
+	if (cmap_shader)
 	{
-		std_cmap_shader->SetLightColor(col | ((int)(desat * 127.0f) << 24));
-		std_cmap_shader->SetDesaturation(desat);
-		std_cmap_shader->ClearTex();
-		std_cmap_shader->Update();
+		cmap_shader->SetLightColor(col | ((int)(desat * 127.0f) << 24));
+		cmap_shader->SetDesaturation(desat);
+		cmap_shader->ClearTex();
+		cmap_shader->Update();
 	}
 }
 

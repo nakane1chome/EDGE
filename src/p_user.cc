@@ -39,6 +39,11 @@
 #include "s_sound.h"
 #include "z_zone.h"
 
+// Room size test - Dasho
+#include "p_blockmap.h"
+
+float room_area;
+
 extern float fade_gdelta;
 extern float fade_gamma;
 extern int fade_starttic;
@@ -187,15 +192,15 @@ static void CalcHeight(player_t * player)
 	{
 	    int sfx_cat;
 
-		if (player == players[consoleplayer1])
+		if (player == players[consoleplayer1]) {
 			sfx_cat = SNCAT_Player;
-		else
+		} else {
 			sfx_cat = SNCAT_Opponent;
-
-			{
-					S_StartFX(player->mo->info->falling_sound, sfx_cat, player->mo);
-			}
+		}
+		S_StartFX(player->mo->info->falling_sound, sfx_cat, player->mo);
 	}
+
+
 	// don't apply bobbing when jumping, but have a smooth
 	// transition at the end of the jump.
 	if (player->jumpwait > 0)
@@ -472,7 +477,7 @@ static void MovePlayer(player_t * player)
 
 			// In `LimitZoom' mode, only allow zooming if weapon supports it
 			if (fov <= 0 && !level_flags.limit_zoom)
-				fov = r_zoomfov.d;
+				fov = r_zoomfov;
 		}
 
 		player->zoom_fov = fov;
@@ -652,8 +657,8 @@ static void P_UpdatePowerups(player_t *player)
 void P_ConsolePlayerBuilder(const player_t *pl, void *data, ticcmd_t *dest)
 {
 	dest->player_idx = pl->pnum;
+	E_BuildTiccmd(dest, pl->pnum);
 
-	E_BuildTiccmd(dest, pl->pnum);//E_BuildTiccmd(dest, pl->pnum);
 }
 
 static u16_t MakeConsistency(const player_t *pl)

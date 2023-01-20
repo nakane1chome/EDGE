@@ -85,15 +85,13 @@ namespace epi
             f->Read(&y, 4);
             grAb->x = EPI_BE_S32(x);
             grAb->y = EPI_BE_S32(y);
-#if DEBUG
-            I_Printf("Got grAb struct: %d/%d\n", grAb->x, grAb->y);
+#if 1
+            I_Printf("Got grAb struct: offset_x->%d/offset_y->%d\n", grAb->x, grAb->y);
 #endif
-            if (grAb->x)
-                grAb->x += (160 - img->used_w / 2);
-                //grAb->x = width / 2 - grAb->x;
-            if (grAb->y)
-                grAb->y += (200 - 32 - img->used_h);
-                //grAb->y = height - grAb->y;
+			if (grAb->x)
+				grAb->x = img->used_w / 2 - grAb->x; // convert grAb offset to OpenGL offset
+			if (grAb->y)
+				grAb->y = grAb->y - img->used_h; // convert grAb offset to OpenGL offset
             img->grAb = grAb;
         }
 

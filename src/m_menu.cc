@@ -93,7 +93,7 @@ int showMessages;
 // This is the original cfg variable, now reintroduced.
 int traditional_menu;
 
-cvar_c m_language;
+DEF_CVAR(m_language, std::string, "c", "ENGLISH");
 
 int screen_hud;  // has default
 
@@ -1319,16 +1319,16 @@ void M_DrawSound(void)
 {
 	HUD_DrawImage(60, 38, menu_svol);
 
-	M_DrawThermo(SoundDef.x, SoundDef.y + LINEHEIGHT * (sfx_vol + 1), SND_SLIDER_NUM, sfx_volume, 1);
-	M_DrawThermo(SoundDef.x, SoundDef.y + LINEHEIGHT * (music_vol + 1), SND_SLIDER_NUM, mus_volume, 1);
+	M_DrawThermo(SoundDef.x, SoundDef.y + LINEHEIGHT * (sfx_vol + 1), SND_SLIDER_NUM, au_sfx_volume, 1);
+	M_DrawThermo(SoundDef.x, SoundDef.y + LINEHEIGHT * (music_vol + 1), SND_SLIDER_NUM, au_mus_volume, 1);
 }
 
 void M_DrawHereticSound(void)
 {
 	HUD_DrawImage(60, 38, menu_svol);
 
-	M_DrawThermo(SoundDef.x, SoundDef.y + HLINEHEIGHT * (sfx_vol + 1), SND_SLIDER_NUM, sfx_volume, 1);
-	M_DrawThermo(SoundDef.x, SoundDef.y + HLINEHEIGHT * (music_vol + 1), SND_SLIDER_NUM, mus_volume, 1);
+	M_DrawThermo(SoundDef.x, SoundDef.y + HLINEHEIGHT * (sfx_vol + 1), SND_SLIDER_NUM, au_sfx_volume, 1);
+	M_DrawThermo(SoundDef.x, SoundDef.y + HLINEHEIGHT * (music_vol + 1), SND_SLIDER_NUM, au_mus_volume, 1);
 }
 
 #if 0
@@ -1344,14 +1344,14 @@ void M_SfxVol(int choice)
 	switch (choice)
 	{
 	case SLIDERLEFT:
-		if (sfx_volume > 0)
-			sfx_volume--;
+		if (au_sfx_volume > 0)
+			au_sfx_volume--;
 
 		break;
 
 	case SLIDERRIGHT:
-		if (sfx_volume < SND_SLIDER_NUM - 1)
-			sfx_volume++;
+		if (au_sfx_volume < SND_SLIDER_NUM - 1)
+			au_sfx_volume++;
 
 		break;
 	}
@@ -1365,14 +1365,14 @@ void M_MusicVol(int choice)
 	switch (choice)
 	{
 	case SLIDERLEFT:
-		if (mus_volume > 0)
-			mus_volume--;
+		if (au_mus_volume > 0)
+			au_mus_volume--;
 
 		break;
 
 	case SLIDERRIGHT:
-		if (mus_volume < SND_SLIDER_NUM - 1)
-			mus_volume++;
+		if (au_mus_volume < SND_SLIDER_NUM - 1)
+			au_mus_volume++;
 
 		break;
 	}
@@ -1998,7 +1998,7 @@ bool M_Responder(event_t * ev)
 	if (msg_mode == 1)
 	{
 		if (msg_needsinput == true &&
-			!(ch == ' ' || ch == 'n' || ch == 'y' || ch == KEYD_ESCAPE))
+			!(ch == ' ' || ch == 'n' || ch == 'y' || ch == KEYD_ESCAPE || ch == KEYD_JOY2))
 			return false;
 
 		msg_mode = 0;
@@ -2013,7 +2013,7 @@ bool M_Responder(event_t * ev)
 	}
 	else if (msg_mode == 2)
 	{
-		if (ch == KEYD_ENTER)
+		if (ch == KEYD_ENTER || ch == KEYD_JOY1)
 		{
 			menuactive = msg_lastmenu ? true : false;
 			msg_mode = 0;
@@ -2028,7 +2028,7 @@ bool M_Responder(event_t * ev)
 			return true;
 		}
 
-		if (ch == KEYD_ESCAPE)
+		if (ch == KEYD_ESCAPE || ch == KEYD_JOY2)
 		{
 			menuactive = msg_lastmenu ? true : false;
 			msg_mode = 0;
@@ -2208,13 +2208,13 @@ bool M_Responder(event_t * ev)
 
 		case KEYD_F11:  // gamma toggle
 
-			var_gamma++;
-			if (var_gamma > 5)
-				var_gamma = 0;
+			r_gamma++;
+			if (r_gamma > 5)
+				r_gamma = 0;
 
 			const char *msg = NULL;
 
-			switch (var_gamma)
+			switch (r_gamma)
 			{
 			case 0: { msg = language["GammaOff"];  break; }
 			case 1: { msg = language["GammaLevelOne"];  break; }
@@ -2234,7 +2234,7 @@ bool M_Responder(event_t * ev)
 		}
 
 		// Pop-up menu?
-		if (ch == KEYD_ESCAPE)
+		if (ch == KEYD_ESCAPE || ch == KEYD_JOY7)
 		{
 			M_StartControlPanel();
 			S_StartFX(sfx_swtchn);
@@ -2248,6 +2248,7 @@ bool M_Responder(event_t * ev)
 	{
 	case KEYD_DOWNARROW:
 	case KEYD_WHEEL_DN:
+	case KEYD_JOY13:
 		do
 		{
 			if (itemOn + 1 > currentMenu->numitems - 1)
@@ -2260,6 +2261,7 @@ bool M_Responder(event_t * ev)
 
 	case KEYD_UPARROW:
 	case KEYD_WHEEL_UP:
+	case KEYD_JOY12:
 		do
 		{
 			if (itemOn == 0)
@@ -2272,6 +2274,8 @@ bool M_Responder(event_t * ev)
 
 	case KEYD_PGUP:
 	case KEYD_LEFTARROW:
+	case KEYD_JOY14:
+	//case KEYD_AXIS3:
 		if (currentMenu->menuitems[itemOn].select_func &&
 			currentMenu->menuitems[itemOn].status == 2)
 		{
@@ -2283,6 +2287,8 @@ bool M_Responder(event_t * ev)
 
 	case KEYD_PGDN:
 	case KEYD_RIGHTARROW:
+	case KEYD_JOY15:
+	//case KEYD_AXIS4:
 		if (currentMenu->menuitems[itemOn].select_func &&
 			currentMenu->menuitems[itemOn].status == 2)
 		{
@@ -2294,6 +2300,7 @@ bool M_Responder(event_t * ev)
 
 	case KEYD_ENTER:
 	case KEYD_MOUSE1:
+	case KEYD_JOY1:
 		if (currentMenu->menuitems[itemOn].select_func &&
 			currentMenu->menuitems[itemOn].status)
 		{
@@ -2306,12 +2313,14 @@ bool M_Responder(event_t * ev)
 	case KEYD_ESCAPE:
 	case KEYD_MOUSE2:
 	case KEYD_MOUSE3:
+	case KEYD_JOY2:
 		currentMenu->lastOn = itemOn;
 		M_ClearMenus();
 		S_StartFX(sfx_swtchx);
 		return true;
 
 	case KEYD_BACKSPACE:
+	//case KEYD_JOY2:
 		currentMenu->lastOn = itemOn;
 		if (currentMenu->prevMenu)
 		{
@@ -2663,7 +2672,7 @@ void M_Drawer(void)
 		int sx = x + SKULLXOFF;
 		int sy = currentMenu->y - 5 + itemOn * LINEHEIGHT;
 
-		HUD_DrawImage(sx, sy, menu_skull[whichSkull]);
+		HUD_DrawImage(sx, sy, menu_skull[0]);
 }
 
 //
@@ -2823,7 +2832,7 @@ void H_Drawer(void)
 	int sx = x + HSKULLXOFF;
 	int sy = currentMenu->y - 5 + itemOn * HLINEHEIGHT;
 
-	HUD_DrawImage(sx, sy, menu_skull[whichSkull]);
+	HUD_DrawImage(sx, sy, menu_skull[0]);
 	//}
 }
 
@@ -2898,9 +2907,9 @@ void M_SetupNextMenu(menu_t * menudef)
 void M_Ticker(void)
 {
 	// update language if it changed
-	if (m_language.CheckModified())
-		if (!language.Select(m_language.str))
-			I_Printf("Unknown language: %s\n", m_language.str);
+	if (m_language_cv_.CheckModified())
+		if (!language.Select(m_language.c_str()))
+			I_Printf("Unknown language: %s\n", m_language.c_str());
 
 	if (option_menuon)
 	{
@@ -3201,8 +3210,8 @@ void M_Init(void)
 	//code below switches out skull
 	if (W_CheckNumForName("M_SLCTR1") >= 0)
 		menu_skull[0] = W_ImageLookup("M_SLCTR1");
-	//else if (W_CheckNumForName("CURSOR01") >= 0)
-		//menu_skull[0] = W_ImageLookup("CURSOR01");
+	else if (W_CheckNumForName("CURSOR01") >= 0)
+		menu_skull[0] = W_ImageLookup("CURSOR01");
 	else
 		menu_skull[0] = W_ImageLookup("M_SKULL1");
 

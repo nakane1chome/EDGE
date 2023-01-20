@@ -140,7 +140,7 @@ extern std::string shot_dir;
 extern bool precache;
 
 // if true, enable HOM detection (hall of mirrors effect)
-extern cvar_c debug_hom;
+extern int debug_hom;
 
 extern int save_page;
 
@@ -150,6 +150,12 @@ extern int quickSaveSlot;
 extern bool singletics;
 
 extern bool splitscreen_mode;
+
+extern bool game_mode_doom;
+extern bool game_mode_doom2;
+extern bool game_mode_hacx;
+extern bool game_mode_plutonia;
+extern bool game_mode_tnt;
 extern bool wolf3d_mode;
 extern bool rott_mode;
 

@@ -55,7 +55,7 @@ namespace epi
 		return (int)ftell(fp);
 	}
 
-	unsigned int ansi_file_c::Read(void *dest, size_t size)
+	unsigned int ansi_file_c::Read(void *dest, unsigned int size)
 	{
 		SYS_ASSERT(fp);
 		SYS_ASSERT(dest);
@@ -74,7 +74,7 @@ namespace epi
 		return result;
 	}
 
-	unsigned int ansi_file_c::Write(const void *src, size_t size)
+	unsigned int ansi_file_c::Write(const void *src, unsigned int size)
 	{
 		SYS_ASSERT(fp);
 		SYS_ASSERT(src);
@@ -138,37 +138,37 @@ namespace epi
 
 	// utility functions...
 
-	bool FS_FlagsToAnsiMode(int flags, char *mode)
-	{
-		// Must have some value in epiflags
-		if (flags == 0)
-			return false;
+bool FS_FlagsToAnsiMode(int flags, char *mode)
+{
+    // Must have some value in epiflags
+    if (flags == 0)
+        return false;
 
-		// Check for any invalid combinations
-		if ((flags & file_c::ACCESS_WRITE) && (flags & file_c::ACCESS_APPEND))
-			return false;
+    // Check for any invalid combinations
+    if ((flags & file_c::ACCESS_WRITE) && (flags & file_c::ACCESS_APPEND))
+        return false;
 
-		if (flags & file_c::ACCESS_READ)
-		{
-			if (flags & file_c::ACCESS_WRITE)
-				strcpy(mode, "wb+");                        // Read/Write
-			else if (flags & file_c::ACCESS_APPEND)
-				strcpy(mode, "ab+");                        // Read/Append
-			else
-				strcpy(mode, "rb");                         // Read
-		}
-		else
-		{
-			if (flags & file_c::ACCESS_WRITE)
-				strcpy(mode, "wb");                         // Write
-			else if (flags & file_c::ACCESS_APPEND)
-				strcpy(mode, "ab");                         // Append
-			else
-				return false;                              // Invalid
-		}
-
-		return true;
-	}
+    if (flags & file_c::ACCESS_READ)
+    {
+        if (flags & file_c::ACCESS_WRITE) 
+            strcpy(mode, "wb+");                        // Read/Write
+        else if (flags & file_c::ACCESS_APPEND)
+            strcpy(mode, "ab+");                        // Read/Append
+        else
+            strcpy(mode, "rb");                         // Read
+    }
+    else
+    {
+        if (flags & file_c::ACCESS_WRITE)       
+            strcpy(mode, "wb");                         // Write
+        else if (flags & file_c::ACCESS_APPEND) 
+            strcpy(mode, "ab");                         // Append
+        else                                         
+            return false;                              // Invalid
+    }
+    
+    return true;
+}
 
 } // namespace epi
 

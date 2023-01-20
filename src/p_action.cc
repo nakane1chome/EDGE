@@ -57,8 +57,10 @@
 #include "z_zone.h"
 
 
-cvar_c g_aggression;
-cvar_c m_tactile, melee_tactile;
+DEF_CVAR(g_aggression, int, "c", 0);
+
+DEF_CVAR(m_tactile, int, "c", 1);
+DEF_CVAR(melee_tactile, int, "c", 0);
 
 static int AttackSfxCat(const mobj_t *mo)
 {
@@ -1230,28 +1232,35 @@ static void LaunchSmartProjectile(mobj_t * source, mobj_t * target,
 static inline bool Weakness_CheckHit(mobj_t *target,
 		const atkdef_c *attack, float x, float y, float z)
 {
+	//I_Printf("Weakness_CheckHit!\n");
 	const weakness_info_c *weak = &target->info->weak;
 
 	if (weak->classes == BITSET_EMPTY)
 		return false;
-
-//I_Debugf("Weakness_CheckHit: target=[%s] classes=0x%08x\n", target->info->name.c_str(), weak->classes);
-
+	
+	if(!attack) //Lobo: This fixes the long standing bug where EDGE crashes out sometimes.
+	{
+		return false; 
+	}
+	
 	if (BITSET_EMPTY != (attack->attack_class & ~weak->classes))
 		return false;
+	
 
 	if (target->height < 1)
 		return false;
 
+I_Debugf("Weakness_CheckHit: target=[%s] classes=0x%08x\n", target->info->name.c_str(), weak->classes); 	
+	
 	// compute vertical position.  Clamping it means that a missile
 	// which hits the target on the head (coming sharply down) will
 	// still register as a head-shot.
 	z = (z - target->z) / target->height;
 	z = CLAMP(0.01f, z, 0.99f);
 
-//I_Debugf("HEIGHT CHECK: %1.2f < %1.2f < %1.2f\n",
-		  //weak->height[0], z, weak->height[1]);
-
+	I_Debugf("HEIGHT CHECK: %1.2f < %1.2f < %1.2f\n",
+			  weak->height[0], z, weak->height[1]);
+	
 	if (z < weak->height[0] || z > weak->height[1])
 		return false;
 
@@ -1259,9 +1268,9 @@ static inline bool Weakness_CheckHit(mobj_t *target,
 
 	ang -= target->angle;
 
-I_Debugf("ANGLE CHECK: %1.2f < %1.2f < %1.2f\n",
-		 ANG_2_FLOAT(weak->angle[0]), ANG_2_FLOAT(ang),
-		 ANG_2_FLOAT(weak->angle[1]));
+	I_Debugf("ANGLE CHECK: %1.2f < %1.2f < %1.2f\n",
+			  ANG_2_FLOAT(weak->angle[0]), ANG_2_FLOAT(ang),
+			  ANG_2_FLOAT(weak->angle[1]));
 
 	if (weak->angle[0] <= weak->angle[1])
 	{
@@ -1361,7 +1370,7 @@ int P_MissileContact(mobj_t * object, mobj_t * target)
 	if (object->extendedflags & EF_TUNNEL)
 	{
 		// this hash is very basic, but should work OK
-		u32_t hash = (u32_t)(long)target;
+		u32_t hash = (u32_t)(intptr_t)target;
 
 		if (object->tunnel_hash[0] == hash || object->tunnel_hash[1] == hash)
 			return -1;
@@ -1886,7 +1895,7 @@ static void DoMeleeAttack(mobj_t * mo)
 
 	//CA: Halved this so the effect isn't so extreme
 	//TODO: Move into COAL (PL_add_tactile)
-	if ((mo->player) && (melee_tactile.d > 0))
+	if ((mo->player) && (melee_tactile > 0))
 		I_Tactile(5, (2 + (int)(damage / 4.0f)) * 2, mo->player->pnum);
 
 	float slope;
@@ -3027,7 +3036,7 @@ void P_ActStandardLook(mobj_t * object)
 	if (object->flags & MF_STEALTH)
 		object->vis_target = VISIBLE;
 
-	if (g_aggression.d)
+	if (g_aggression)
 		if (CreateAggression(object) || CreateAggression(object)) //TODO: V501 https://www.viva64.com/en/w/v501/ There are identical sub-expressions 'CreateAggression(object)' to the left and to the right of the '||' operator.
 			return;
 

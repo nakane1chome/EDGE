@@ -42,9 +42,12 @@
 #include "r_misc.h"
 #include "z_zone.h"
 
-extern bool CON_Responder(event_t *ev);
-extern bool   M_Responder(event_t *ev);
-extern bool   G_Responder(event_t *ev);
+
+
+extern bool CON_Responder(event_t* ev);
+extern bool   M_Responder(event_t* ev);
+extern bool   G_Responder(event_t* ev);
+
 extern int I_JoyGetAxis(int n);
 
 //
@@ -65,15 +68,17 @@ static int eventtail;
 // Options
 input_options_t input_options;
 
-// Export ??
-cvar_c joy_dead;
-cvar_c joy_peak;
-cvar_c joy_tuning;
-cvar_c in_running;
-cvar_c in_stageturn;
-cvar_c mouse_filter;
-cvar_c debug_mouse;
-cvar_c debug_joyaxis;
+DEF_CVAR(joy_dead, float, "c", 0.15f);
+DEF_CVAR(joy_peak, float, "c", 0.95f);
+DEF_CVAR(joy_tuning, float, "c", 1.0f);
+
+DEF_CVAR(in_running, int, "c", 0);
+DEF_CVAR(in_stageturn, int, "c", 1);
+// DEF_CVAR(mouse_filter, int, "c", 0);
+
+DEF_CVAR(debug_mouse, int, "", 0);
+DEF_CVAR(debug_joyaxis, int, "", 0);
+
 // Speed controls
 int var_turnspeed;
 int var_mlookspeed;
@@ -132,24 +137,24 @@ static float JoyAxisFromRaw(int raw)
 
 	float v = raw / 32768.0f;
 
-	if (fabs(v) <= joy_dead.f + 0.01)
+	if (fabs(v) <= joy_dead + 0.01)
 		return 0;
 
-	if (fabs(v) >= joy_peak.f - 0.01)
+	if (fabs(v) >= joy_peak - 0.01)
 		return (v < 0) ? -1.0f : +1.0f;
 
-	SYS_ASSERT(joy_peak.f > joy_dead.f);
+	SYS_ASSERT(joy_peak > joy_dead);
 
-	float t = CLAMP(0.2f, joy_tuning.f, 5.0f);
+	float t = CLAMP(0.2f, joy_tuning, 5.0f);
 
 	if (v >= 0)
 	{
-		v = (v - joy_dead.f) / (joy_peak.f - joy_dead.f);
+		v = (v - joy_dead) / (joy_peak - joy_dead);
 		return pow(v, 1.0f / t);
 	}
 	else
 	{
-		v = (-v - joy_dead.f) / (joy_peak.f - joy_dead.f);
+		v = (-v - joy_dead) / (joy_peak - joy_dead);
 		return -pow(v, 1.0f / t);
 	}
 }
@@ -173,7 +178,7 @@ static void UpdateJoyAxis(int n)
 	if ((input_options.joy_axis[n] + 1) & 1)
 		force = -force;
 
-	if (debug_joyaxis.d == n + 1)
+	if (debug_joyaxis == n + 1)
 	{
 		I_Printf("Axis%d : raw %+05d --> %+7.3f\n", n + 1, raw, force);
 	}
@@ -221,6 +226,26 @@ static inline void AddKeyForce(int axis, int upkeys, int downkeys, float qty = 1
 	}
 }
 
+static void UpdateForces1(void)
+{
+	for (int k = 0; k < 6; k++)
+		joy_forces[k] = 0;
+
+	// ---Keyboard---
+
+	AddKeyForce(AXIS_TURN, key_right, key_left);
+	AddKeyForce(AXIS_MLOOK, key_lookup, key_lookdown);
+	AddKeyForce(AXIS_FORWARD, key_up, key_down);
+	// -MH- 1998/08/18 Fly down
+	AddKeyForce(AXIS_FLY, key_flyup, key_flydown);
+	AddKeyForce(AXIS_STRAFE, key_straferight, key_strafeleft);
+
+	// ---Joystick---
+
+	for (int j = 0; j < 6; j++)
+		UpdateJoyAxis(j);
+}
+
 static void UpdateForces(void)
 {
 	for (int k = 0; k < 6; k++)
@@ -237,8 +262,8 @@ static void UpdateForces(void)
 
 	// ---Joystick---
 
-	//for (int j = 0; j < 6; j++)
-	//	UpdateJoyAxis(j);
+	for (int j = 0; j < 6; j++)
+		UpdateJoyAxis(j);
 }
 
 static void UpdateJoyForces(void)
@@ -265,7 +290,7 @@ static int CmdChecksum(ticcmd_t * cmd)
 	int sum = 0;
 
 	for (i = 0; i < (int)sizeof(ticcmd_t) / 4 - 1; i++)
-		sum += ((int *)cmd)[i];
+		sum += ((int*)cmd)[i];
 
 	return sum;
 }
@@ -313,7 +338,13 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 		return;
 	}
 
-	UpdateForces();
+	if (splitscreen_mode && cmd->player_idx == consoleplayer1)
+	{
+		UpdateForces();
+		return;
+	}
+	else
+		UpdateForces1();
 
 	Z_Clear(cmd, ticcmd_t, 1);
 
@@ -321,7 +352,7 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 	int  speed = E_IsKeyPressed(input_options.key_speed) ? 1 : 0;
 
 
-	if (in_running.d)
+	if (in_running)
 		speed = !speed;
 
 	//
@@ -332,18 +363,19 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 	//
 	int t_speed = speed;
 
+
 	if (fabs(joy_forces[AXIS_TURN]) > 0.2f)
 		turnheld++;
 	else
 		turnheld = 0;
 
 	// slow turn ?
-	if (turnheld < SLOWTURNTICS && in_stageturn.d)
+	if (turnheld < SLOWTURNTICS && in_stageturn)
 		t_speed = 2;
 
 	int m_speed = speed;
 
-	if (splitscreen_mode)
+	if (splitscreen_mode && cmd->player_idx == consoleplayer1)
 	{
 		if (fabs(ball_deltas[AXIS_MLOOK]) > 0.2f)
 			mlookheld++;
@@ -359,7 +391,7 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 	}
 
 	// slow mlook ?
-	if (mlookheld < SLOWTURNTICS && in_stageturn.d)
+	if (mlookheld < SLOWTURNTICS && in_stageturn)
 		m_speed = 2;
 
 
@@ -387,8 +419,6 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 
 		cmd->mlookturn = I_ROUND(mlook);
 	}
-
-
 
 	// Forward
 	{
@@ -518,7 +548,7 @@ void E_BuildTiccmd(ticcmd_t * cmd, int which_player)
 	{
 		if (allowautorun)
 		{
-			in_running = in_running.d ? 0 : 1;
+			in_running = in_running ? 0 : 1;
 			allowautorun = false;
 		}
 	}
@@ -540,7 +570,7 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 	//bJoystickActive = 1;
 
 
-	UpdateJoyForces();
+	//UpdateJoyForces();
 
 	Z_Clear(cmd, ticcmd_t, 1);
 
@@ -548,7 +578,7 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 	int  speed = E_IsKeyPressed(input_options.key_speed) ? 1 : 0;
 
 
-	if (in_running.d)
+	if (in_running)
 		speed = !speed;
 
 	//
@@ -565,7 +595,7 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 		turnheld = 0;
 
 	// slow turn ?
-	if (turnheld < SLOWTURNTICS && in_stageturn.d)
+	if (turnheld < SLOWTURNTICS && in_stageturn)
 		t_speed = 2;
 
 	int m_speed = speed;
@@ -576,7 +606,7 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 		mlookheld = 0;
 
 	// slow mlook ?
-	if (mlookheld < SLOWTURNTICS && in_stageturn.d)
+	if (mlookheld < SLOWTURNTICS && in_stageturn)
 		m_speed = 2;
 
 	// Turning
@@ -632,12 +662,12 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 		side *= SPEED_FACTORS[var_sidespeed];
 
 		// -ACB- 1998/09/06 Side Move Speed Control
-		//side += sidemove[speed] * ball_deltas[AXIS_STRAFE] / 64.0;
+		side += sidemove[speed] * ball_deltas[AXIS_STRAFE] / 64.0;
 
-		//if (strafe)
-		//	side += sidemove[speed] * ball_deltas[AXIS_TURN] / 64.0;
+		if (strafe)
+			side += sidemove[speed] * ball_deltas[AXIS_TURN] / 64.0;
 
-		//side = CLAMP(-MAXPLMOVE, side, MAXPLMOVE);
+		side = CLAMP(-MAXPLMOVE, side, MAXPLMOVE);
 
 		cmd->sidemove = I_ROUND(side);
 	}
@@ -673,15 +703,15 @@ void E_BuildTiccmd_Other(ticcmd_t * cmd)
 	{
 		if (allowautorun)
 		{
-			in_running = in_running.d ? 0 : 1;
+			in_running = in_running ? 0 : 1;
 			allowautorun = false;
 		}
 	}
 	else
 		allowautorun = true;
 
-	//for (int k = 0; k < 6; k++)
-	//ball_deltas[k] = 0;
+	for (int k = 0; k < 6; k++)
+	ball_deltas[k] = 0;
 	//for (int k = 0; k < 6; k++)
 		//ball_deltas[k] = 0;
 }
@@ -741,7 +771,7 @@ bool INP_Responder(event_t * ev)
 		dx *= SENSITIVITIES[input_options.mouse_xsens];
 		dy *= SENSITIVITIES[input_options.mouse_ysens];
 
-		if (debug_mouse.d)
+		if (debug_mouse)
 			I_Printf("Mouse %+04d %+04d --> %+7.2f %+7.2f\n",
 				ev->data2, ev->data3, dx, dy);
 
@@ -857,7 +887,7 @@ void E_PostEvent(event_t * ev)
 //
 void E_ProcessEvents(void)
 {
-	event_t *ev;
+	event_t* ev;
 
 	for (; eventtail != eventhead; eventtail = (eventtail + 1) % MAXEVENTS)
 	{
@@ -883,7 +913,7 @@ typedef struct specialkey_s
 {
 	int key;
 
-	const char *name;
+	const char* name;
 }
 specialkey_t;
 
@@ -979,12 +1009,46 @@ static specialkey_t special_keys[] =
 	{ KEYD_JOY14, "Joy14" },
 	{ KEYD_JOY15, "Joy15" },
 
+    // joystick buttons
+    { KEYD_AXIS1,  "Axis1+" },
+    { KEYD_AXIS2,  "Axis2+" },
+    { KEYD_AXIS3,  "Axis3+" },
+    { KEYD_AXIS4,  "Axis4+" },
+    { KEYD_AXIS5,  "Axis5+" },
+    { KEYD_AXIS6,  "Axis6+" },
+    { KEYD_AXIS7,  "Axis7+" },
+    { KEYD_AXIS8,  "Axis8+" },
+    { KEYD_AXIS9,  "Axis9+" },
+    { KEYD_AXIS10, "Axis10+" },
+    { KEYD_AXIS11, "Axis11+" },
+    { KEYD_AXIS12, "Axis12+" },
+    { KEYD_AXIS13, "Axis13+" },
+    { KEYD_AXIS14, "Axis14+" },
+    { KEYD_AXIS15, "Axis15+" },
+    { KEYD_AXIS16, "Axis16+" },
+    { KEYD_AXIS1 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis1-" },
+    { KEYD_AXIS2 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis2-" },
+    { KEYD_AXIS3 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis3-" },
+    { KEYD_AXIS4 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis4-" },
+    { KEYD_AXIS5 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis5-" },
+    { KEYD_AXIS6 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis6-" },
+    { KEYD_AXIS7 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis7-" },
+    { KEYD_AXIS8 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis8-" },
+    { KEYD_AXIS9 | KEYD_AXIS_FLAG_NEGATIVE,  "Axis9-" },
+    { KEYD_AXIS10 | KEYD_AXIS_FLAG_NEGATIVE, "Axis10-" },
+    { KEYD_AXIS11 | KEYD_AXIS_FLAG_NEGATIVE, "Axis11-" },
+    { KEYD_AXIS12 | KEYD_AXIS_FLAG_NEGATIVE, "Axis12-" },
+    { KEYD_AXIS13 | KEYD_AXIS_FLAG_NEGATIVE, "Axis13-" },
+    { KEYD_AXIS14 | KEYD_AXIS_FLAG_NEGATIVE, "Axis14-" },
+    { KEYD_AXIS15 | KEYD_AXIS_FLAG_NEGATIVE, "Axis15-" },
+    { KEYD_AXIS16 | KEYD_AXIS_FLAG_NEGATIVE, "Axis16-" },
+
 	// THE END
 	{ -1, NULL }
 };
 
 
-const char *E_GetKeyName(int key)
+const char* E_GetKeyName(int key)
 {
 	static char buffer[32];
 

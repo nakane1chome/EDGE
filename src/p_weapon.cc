@@ -428,8 +428,7 @@ static void P_BringUpWeapon(player_t * p)
 		return;
 	}
 
-	weapondef_c *info = p->weapons[sel].info; 
-	//TODO: V557 https://www.viva64.com/en/w/v557/ Array underrun is possible. The 'sel' index is pointing beyond array bound.
+	weapondef_c *info = p->weapons[sel].info;
 
 	// update current key choice
 	if (info->bind_key >= 0)
@@ -445,7 +444,7 @@ static void P_BringUpWeapon(player_t * p)
 		else if (level_flags.limit_zoom)
 			p->zoom_fov = 0;
 		else
-			p->zoom_fov = r_zoomfov.d;
+			p->zoom_fov = r_zoomfov;
 	}
 
 	if (info->start)
@@ -1243,7 +1242,7 @@ void A_Lower(mobj_t * mo)
 		if (level_flags.limit_zoom)
 			p->zoom_fov = 0;
 		else
-			p->zoom_fov = r_zoomfov.d;
+			p->zoom_fov = r_zoomfov;
 	}
 
 	psp->sy += LOWERSPEED;

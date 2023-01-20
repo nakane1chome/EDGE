@@ -47,9 +47,8 @@
 #include "r_units.h"
 
 
-cvar_c r_fov;
-cvar_c r_zoomfov;
-cvar_c r_renderprecise;
+DEF_CVAR(r_fov, float, "c", 90.0f);
+DEF_CVAR(r_zoomfov, int, "c", 10);
 
 int viewwindow_x;
 int viewwindow_y;
@@ -116,7 +115,11 @@ int telept_reverse = 0;
 int simple_shadows = 0;
 
 int var_invul_fx;
-
+float *r_sintable = new float[FUNCTABLE_SIZE];
+float *r_squaretable = new float[FUNCTABLE_SIZE];
+float *r_sawtoothtable = new float[FUNCTABLE_SIZE];
+float *r_inversesawtoothtable = new float[FUNCTABLE_SIZE];
+float *r_triangletable = new float[FUNCTABLE_SIZE];
 
 // e6y
 // The precision of the code above is abysmal so use the CRT atan2 function instead!
@@ -130,12 +133,12 @@ angle_t R_PointToAngleEx(float x, float y)
 	static uint64_t old_y_viewy;
 	static uint64_t old_x_viewx;
 	static int old_result;
-	cvar_c render_precise;
+	//cvar_c render_precise; // FIXME: WTF?	
 
 	uint64_t y_viewy = (uint64_t)y - viewy;
 	uint64_t x_viewx = (uint64_t)x - viewx;
 
-	if (!render_precise.d)
+	/*if (!render_precise.d)
 	{
 		// e6y: here is where "slime trails" can SOMETIMES occur
 
@@ -143,7 +146,7 @@ angle_t R_PointToAngleEx(float x, float y)
 			&& y_viewy > -INT_MAX / 4 && x_viewx > -INT_MAX / 4) //TODO: V605 https://www.viva64.com/en/w/v605/ Consider verifying the expression: y_viewy > - 2147483647 / 4. An unsigned value is compared to the number -536870911.
 
 			return R_PointToAngle(viewx, viewy, x, y);
-	}
+	}*/ 
 
 	if (old_y_viewy != y_viewy || old_x_viewx != x_viewx)
 	{
@@ -170,6 +173,20 @@ angle_t R_PointToAngle(float x1, float y1, float x, float y)
 	x -= x1;
 	y -= y1;
 	return (x == 0) && (y == 0) ? 0 : FLOAT_2_ANG(atan2(y, x) * (180 / M_PI));
+}
+
+//Float version of R_PointToAngle (!)
+inline float E_PointToAngle(float x, float y)
+{
+	if (-0.01 < x && x < 0.01)
+		return static_cast<float>((y > 0) ? M_PI / 2 : (3 * M_PI / 2));
+
+	float angle = atan2(y, x);
+
+	if (angle < 0)
+		angle += static_cast<float>(2 * M_PI);
+
+	return angle;
 }
 
 // faster less precise PointToAngle
@@ -244,10 +261,49 @@ angle_t R_GetVertexViewAngle(vertex_t *v)
 
 float R_PointToDist(float x1, float y1, float x2, float y2)
 {
-	return sqrt(pow((x1-x2), 2)+pow((y1-y2), 2)); //pythagorean distance formula. Wow, wasn't that easier?
+	//return sqrt(pow((x1-x2), 2)+pow((y1-y2), 2)); //pythagorean distance formula. Wow, wasn't that easier?
+	return sqrtf((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
 }
 
+double invsqrtQuake(double number)
+{
+	double y = number;
+	double x2 = y * 0.5;
+	std::int64_t i = *(std::int64_t*) & y;
+	// The magic number is for doubles is from https://cs.uwaterloo.ca/~m32rober/rsqrt.pdf
+	i = 0x5fe6eb50c7b537a9 - (i >> 1);
+	y = *(double*)& i;
+	y = y * (1.5 - (x2 * y * y));   // 1st iteration
+	//      y  = y * ( 1.5 - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+	return y;
+}
 
+void R_InitShaderTables()
+{
+	for ( int i = 0; i < FUNCTABLE_SIZE; i++ )
+	{
+		r_sintable[i] = sin(DEG2RAD(i * 360.0f / ((float)(FUNCTABLE_SIZE - 1))));
+		r_squaretable[i]	= ( i < FUNCTABLE_SIZE/2 ) ? 1.0f : -1.0f;
+		r_sawtoothtable[i] = (float)i / FUNCTABLE_SIZE;
+		r_inversesawtoothtable[i] = 1.0f - r_sawtoothtable[i];
+
+		if ( i < FUNCTABLE_SIZE / 2 )
+		{
+			if ( i < FUNCTABLE_SIZE / 4 )
+			{
+				r_triangletable[i] = ( float ) i / ( FUNCTABLE_SIZE / 4 );
+			}
+			else
+			{
+				r_triangletable[i] = 1.0f - r_triangletable[i-FUNCTABLE_SIZE / 4];
+			}
+		}
+		else
+		{
+			r_triangletable[i] = -r_triangletable[i-FUNCTABLE_SIZE/2];
+		}
+	}
+}
 
 //
 // Called once at startup, to initialise some rendering stuff.
@@ -256,6 +312,7 @@ void R_Init(void)
 {
 	E_ProgressMessage(language["RefreshDaemon"]);
 
+	R_InitShaderTables();
 	framecount = 0;
 
 	// -AJA- 1999/07/01: Setup colour tables.

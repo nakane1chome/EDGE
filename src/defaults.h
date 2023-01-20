@@ -1,9 +1,9 @@
 //----------------------------------------------------------------------------
 //  EDGE2 Default Settings
 //----------------------------------------------------------------------------
-// 
+//
 //  Copyright (c) 1999-2009  The EDGE2 Team.
-// 
+//
 //  This program is free software; you can redistribute it and/or
 //  modify it under the terms of the GNU General Public License
 //  as published by the Free Software Foundation; either version 2
@@ -24,6 +24,10 @@
 #define CFGDEF_SCREENHEIGHT     (480)
 #define CFGDEF_SCREENBITS       (32)
 #define CFGDEF_FULLSCREEN       (0)
+
+// intros
+#define CFGDEF_PLAYSPLASH		(0)
+#define CFGDEF_PLAYINTRO		(1)
 
 // Controls (Key/Mouse Buttons)
 #define CFGDEF_KEY_FIRE         (KEYD_RCTRL + (KEYD_MOUSE1 << 16))
@@ -73,6 +77,7 @@
 // Misc
 #define CFGDEF_MENULANGUAGE     (0)
 #define CFGDEF_SHOWMESSAGES     (1)
+#define CFGDEF_DISK_ICON        (1)
 
 // Sound and Music
 #define CFGDEF_SOUND_VOLUME     (8)
@@ -80,14 +85,14 @@
 #define CFGDEF_SAMPLE_RATE      (5)  // 22050Hz, 5 = 48000Hz
 #define CFGDEF_SOUND_BITS       (2)  // 16-bit, 2 = 32-bit floating point
 #define CFGDEF_SOUND_STEREO     (1)  // Stereo
-#define CFGDEF_MIX_CHANNELS     (3)  // 32 channels, 3 = 96 mixing channels!
+#define CFGDEF_MIX_CHANNELS     (2)  // 32 channels, 3 = 96 mixing channels!
 #define CFGDEF_QUIET_FACTOR     (1)
 #define CFGDEF_OPL_OPL3MODE     (1)
 
 #ifdef LINUX
-#define CFGDEF_MUSIC_DEVICE     (1)  // Timidity
+#define CFGDEF_MUSIC_DEVICE     (1)  // TinySoundfont
 #else
-#define CFGDEF_MUSIC_DEVICE     (2)  // System
+#define CFGDEF_MUSIC_DEVICE     (2)  // OPL
 #endif
 
 // Video Options
@@ -112,8 +117,12 @@
 #define CFGDEF_WIPE_REVERSE     (0)
 #define CFGDEF_USE_VSYNC        (1)
 #define CFGDEF_INTERPOLATION    (1)
-#define CFGDEF_SCREENSHAKE      (1)
+#define CFGDEF_SCREENSHAKE      (0)
 #define CFGDEF_MELEESHAKE       (0)
+#define CFGDEF_USEBLOOM         (1)
+#define CFGDEF_LENSDISTORT      (1)
+#define CFGDEF_STRETCHSCENE     (1)
+#define CFGDEF_SPRITESCALE      (1)
 
 // Gameplay Options
 #define CFGDEF_AUTOAIM          (1)
@@ -127,7 +136,7 @@
 #define CFGDEF_TRUE3DGAMEPLAY   (1)
 #define CFGDEF_PASS_MISSILE     (1)
 #define CFGDEF_MENU_GRAV        (MENU_GRAV_NORMAL)
-#define CFGDEF_RES_RESPAWN      (1)       // Resurrect Mode 
+#define CFGDEF_RES_RESPAWN      (1)       // Resurrect Mode
 #define CFGDEF_ITEMRESPAWN      (0)
 #define CFGDEF_FASTPARM         (0)
 #define CFGDEF_RESPAWN          (0)

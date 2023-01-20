@@ -27,6 +27,11 @@
 #include <linux/cdrom.h>
 #endif
 
+#ifdef VITA
+#include <vitasdk.h>
+#include <vita2d.h>
+#endif
+
 #include "system/i_local.h"  // FIXME: remove
 
 

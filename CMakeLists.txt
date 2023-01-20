@@ -1,5 +1,53 @@
 cmake_minimum_required(VERSION 3.2.2)
-project(EDGE)
+################################################################################
+################################################################################
+## Copyright (c) 1997-2020 The EDGE Team (see AUTHORS.md)
+##
+## This software is free software; you can redistribute it and/or
+## modify it under the terms of the GNU General Public License as published by
+## the Free Software Foundation; either version 2 of the License, or
+## (at your option) any later version.
+##
+## This software is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with this program; if not, write to the Free Software
+## Foundation, Inc., 51 Franklin St, Fifth Floor,
+## Boston, MA  02110-1301  USA
+##
+################################################################################
+######################### CMake Configuration ##################################
+
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+  if(DEFINED ENV{VITASDK})
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
+	message(STATUS "VitaSDK found! Configuring to use VitaSDK")
+  else()
+    message(STATUS "Please define VITASDK to point to your SDK path if you want to build for VITA!")
+  endif()
+  if(DEFINED ENV{VCPKG_ROOT})
+	 set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+     CACHE STRING "")
+  else()
+	message(STATUS "Please define VCPKG_ROOT to point to your cmake script if you want to use VCPKG!")
+  endif()
+endif()
+
+project(EDGE
+LANGUAGES CXX
+VERSION 2.1.0
+)
+
+
+if(VITA)
+	include("${VITASDK}/share/vita.cmake" REQUIRED)
+	set(VITA_APP_NAME "vitaEDGE")
+	set(VITA_TITLEID  "VSDK00017")
+	set(VITA_VERSION  "01.00")
+endif()
 
 if( COMMAND cmake_policy )
 	if( POLICY CMP0011 )
@@ -10,8 +58,14 @@ if( COMMAND cmake_policy )
 	endif()
 endif()
 
+IF (${CMAKE_BINARY_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
+        MESSAGE( FATAL_ERROR "In-tree Builds are NOT supported.")
+ENDIF (${CMAKE_BINARY_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
+
 list( APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake )
-include( FindPackageHandleStandardArgs )
+#include( FindPackageHandleStandardArgs )
+#set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH} cmake")
+
 
 macro( make_release_only )
 	set( CMAKE_C_FLAGS_MINSIZEREL ${CMAKE_C_FLAGS_RELEASE} )
@@ -22,42 +76,123 @@ macro( make_release_only )
 	string( REPLACE "/MT " "/MTd " CMAKE_CXX_FLAGS_DEBUG ${CMAKE_CXX_FLAGS_RELEASE} )
 endmacro()
 
-set( LZMA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lzma/C" )
+set( LZMA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/lzma/C" )
+option(FORCE_STATIC_MSVC_LIBS "Use pre-build via ./libs" OFF)
 option(FORCE_INTERNAL_ZLIB "Use internal zlib")
 option(FORCE_INTERNAL_BZIP2 "Use internal bzip2")
+option(FORCE_INTERNAL_PHYSFS "Use internal physfs")
 option(HYPERTENSION "Compile Hypertension Executable" OFF)
-option(DAIKATANA "Compile Daikatana2 Executable" OFF)
+if(MINGW)
+	option(MINGW_LINK_STATIC "Link statically on MinGW" ON)
+endif()
 
+if(MINGW AND MINGW_LINK_STATIC)
+	SET(CMAKE_FIND_LIBRARY_PREFIXES "lib")
+	SET(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a)
+endif()
+
+
+#find_package(Ogg REQUIRED)
+#find_package(Vorbis REQUIRED)
 find_package( ZLIB )
 find_package( BZip2 )
+find_package ( PhysFS )
+find_package(SDL2 REQUIRED)
+#find_package ( libdumb )
+
 #find_package ( FFMPEG )
 #find_package ( SDLKitchensink )
+
+if(APPLE)
+find_library(COCOA_LIBRARY Cocoa)
+FIND_PATH(COCOA_INCLUDE_DIR Cocoa/Cocoa.h)
+endif()
+
+if(MSVC)
+add_compile_options(/Qspectre-)
+endif()
+
 #set (SDL_kitchensink_static "Statically link SDLKitchensink" ON)
 #set (SDL_kitchensink "Do not Statically link SDLKitchensink" OFF)
 
-if( ZLIB_FOUND AND NOT FORCE_INTERNAL_ZLIB )
-	message( STATUS "Using system zlib, includes found at ${ZLIB_INCLUDE_DIR}" )
+if(NOT ZLIB_FOUND OR INTERNAL_ZLIB)
+	message(STATUS "Using internal zlib")
+	set(ZLIB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/zlib)
+	add_subdirectory(deps/zlib)
+	set(ZLIB_LIBRARIES ZLIB::ZLIB)
+	set(ZLIB_LIBRARY ZLIB::ZLIB)
 else()
-	message( STATUS "Using internal zlib" )
-	set( SKIP_INSTALL_ALL TRUE ) # Avoid installing zlib alongside 3dge
-	add_subdirectory( zlib )
-	set( ZLIB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/zlib )
-	set( ZLIB_LIBRARIES z )
-	set( ZLIB_LIBRARY z )
+	message(STATUS "Using system zlib, includes found at ${ZLIB_INCLUDE_DIR}")
 endif()
 
 if( BZIP2_FOUND AND NOT FORCE_INTERNAL_BZIP2 )
 	message( STATUS "Using system bzip2 library, includes found at ${BZIP2_INCLUDE_DIR}" )
 else()
 	message( STATUS "Using internal bzip2 library" )
-	add_subdirectory( bzip2 )
-	set( BZIP2_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bzip2" )
+	add_subdirectory( deps/bzip2 )
+	set( BZIP2_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/bzip2" )
 	set( BZIP2_LIBRARIES bz2 )
 	set( BZIP2_LIBRARY bz2 )
 endif()
 
+if( PHYSFS_FOUND AND NOT FORCE_INTERNAL_PHYSFS )
+	message( STATUS "Using system physfs library, includes found at ${PHYSFS_INCLUDE_DIR}" )
+else()
+	message( STATUS "Using internal physfs library" )
+	add_subdirectory( deps/physfs )
+	set (PHYSFS_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/physfs/src")
+	set( PHYSFS_LIBRARIES physfs-static )
+	set( PHYSFS_LIBRARY physfs-static )
+endif()
 
-add_subdirectory( lzma )
+if( LIBGME_FOUND AND NOT FORCE_INTERNAL_LIBGME )
+	message( STATUS "Using system libgme library, includes found at ${LIBGME_INCLUDE_DIR}" )
+else()
+	message( STATUS "Using internal libgme library" )
+	add_subdirectory( deps/libgme )
+	set (LIBGME_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/libgme/gme")
+	set( LIBGME_LIBRARIES gme)
+	set( LIBGME libgme )
+endif()
+
+#find_package(FLTK)
+#if(NOT FLTK_FOUND)
+    # if(WIN32)
+        # message("FLTK not found in standard location; looking in ${lookout_dir}/lib/x86")
+        # set(FLTK_LIBRARIES
+            # ${lookout_dir}/lib/x86/fltk.lib
+            # ${lookout_dir}/lib/x86/fltkforms.lib
+            # ${lookout_dir}/lib/x86/fltkgl.lib
+            # ${lookout_dir}/lib/x86/fltkimages.lib
+            # ${lookout_dir}/lib/x86/fltkjpeg.lib
+            # ${lookout_dir}/lib/x86/fltkpng.lib
+            # ${lookout_dir}/lib/x86/fltkzlib.lib
+        # )
+        # set(FLTK_INCLUDE_DIR ${lookout_dir}/include)
+    # endif()
+# endif()
+
+#if( LIBDUMB_FOUND AND NOT FORCE_INTERNAL_LIBDUMB )
+#	message( STATUS "Using system libdumb library, includes found at ${LIBDUMB_INCLUDE_DIR}" )
+#else()
+#	message( STATUS "Using internal libdumb library" )
+#	add_subdirectory( deps/dumb )
+#	set (LIBDUMB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/dumb/include")
+#	set( LIBDUMB_LIBRARIES dumb )
+#	set( LIBDUMB_LIBRARY dumb )
+#endif()
+#add_subdirectory( deps/miniz )
+#add_subdirectory( deps/libgme/gme )
+add_subdirectory( deps/libxmp-lite )
+add_subdirectory( deps/libwebsid )
+
+add_subdirectory( deps/lzma )
+add_subdirectory( zipdir )
+add_subdirectory( ajbsp ) 
+
+if(MSVC)
+	add_definitions(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
+endif()
 
 # Recursive function to place PK3 archive source files into a hierarchy of source file in the IDE
 function( assort_pk3_source_folder FOLDER_NAME PK3_DIR )
@@ -131,34 +266,47 @@ endfunction()
 add_subdirectory(wadsrc)
 add_subdirectory(data)
 
-# MSVC
-if(MSVC)
-	add_definitions(-D_CRT_SECURE_NO_WARNINGS=1)
+add_definitions(-D_CRT_SECURE_NO_WARNINGS=1)
 
-	if(NOT "${CMAKE_GENERATOR}" MATCHES "(Win64|IA64)")
-		set( CMAKE_CXX_FLAGS "/MP /GF /Ox /Ob2 /Oi /Ot /GT /W2 ${CMAKE_CXX_FLAGS} /arch:SSE2" )
-	else()
-		set( CMAKE_CXX_FLAGS "/MP /GF /Ox /Ob2 /Oi /Ot /GT /W2 ${CMAKE_CXX_FLAGS} /arch:AVX" )
-		add_definitions(-DSIMD_X64)
-		add_definitions(-DWIN64)
-	endif()
-else()
-	if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm")
+if (MSVC)
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+	set( CMAKE_CXX_FLAGS "/MP /GF /Ox /Ob2 /Oi /Ot /GT /W1 ${CMAKE_CXX_FLAGS} /std:c++17" )
+	add_definitions(-DSIMD_X64)
+	add_definitions(-DWIN64)
+	add_definitions(/W1)
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+	set( CMAKE_CXX_FLAGS "/MP /GF /Ox /Ob2 /Oi /Ot /GT /W1 ${CMAKE_CXX_FLAGS} /std:c++17 /arch:SSE2" )
+	add_definitions(/W1)
+endif()
+endif(MSVC)
+
+if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm" AND NOT APPLE)
 		set ( CMAKE_CXX_FLAGS "-mfpu=neon-vfpv4 -mtune=cortex-a7 -mhard-float ${CMAKE_CXX_FLAGS}" )
-	else ()
-		set ( CMAKE_CXX_FLAGS "-msse2 ${CMAKE_CXX_FLAGS}" )
+	elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64" AND NOT APPLE)
+		set( CMAKE_CXX_FLAGS "-mcpu=cortex-a72 -mtune=cortex-a72 -march=armv8-a+fp+simd+crc ${CMAKE_CXX_FLAGS}" )
+	elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm64" AND APPLE)
+		set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" )
+	elseif(CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT MSVC)
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2")
 	endif()
+if(NOT MSVC)
 	if( CMAKE_CXX_COMPILER_ID STREQUAL "Clang" )
-		set ( CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}" )
+		set ( CMAKE_CXX_FLAGS "-std=c++17 ${CMAKE_CXX_FLAGS}" )
 	else ()
-		set ( CMAKE_CXX_FLAGS "-std=gnu++11 ${CMAKE_CXX_FLAGS}" )
-	endif()
+		set ( CMAKE_CXX_FLAGS "-std=gnu++17 ${CMAKE_CXX_FLAGS}" )
+endif()
+endif(NOT MSVC)
+
+if(CMAKE_BUILD_TOOL MATCHES "(msdev|devenv|nmake)")
+    add_definitions(/W1)
 endif()
 
 add_definitions(
 	-DDEH_EDGE_PLUGIN
 	-DHAVE_PHYSFS
-#	-DUSE_FFMPEG
+	-DHAVE_EDGE_AJBSP_H
+	#-DUSE_FFMPEG
 )
 
 # For the Hypertension team, we must continue using SSE2 and _not_ AVX, since not everyone has an AVX-compatible processor.
@@ -189,20 +337,14 @@ elseif(UNIX)
 			-DBSD
 			-DHAVE_STDINT_H
 		)
-	else()
-		add_definitions(
+		else()
+			add_definitions(
 			-DLINUX
 			-DHAVE_STDINT_H
 		)
 	endif()
 endif()
 
-# Module Paths
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/modules)
-
-#message(${CMAKE_MODULE_PATH})
-
-add_subdirectory( tools/zipdir )
 
 # Gitinfo Puller thingy
 add_custom_target(revision_check ALL
@@ -225,78 +367,68 @@ ENDIF (WIN32)
 
 # See /VSLibs/lib_versions.txt [libs have been compiled with MSVC 2017!]
 # CA: 11/30/18 - For MSVC, libs are no longer required to be downloaded seperately, they now exist in /libs/msvc/
-if (MSVC)
-	if(NOT "${CMAKE_GENERATOR}" MATCHES "(Win64|IA64)")
+if (FORCE_STATIC_MSVC_LIBS)
+	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+		set( SDL_NET_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/SDL_net-2.0.1/lib/x64/SDL2_net.lib" )
+	elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
 		set( SDL_NET_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/SDL_net-2.0.1/lib/x86/SDL2_net.lib" )
-		set( ogg_DEBUG_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libogg-1.3.3/lib/x86/libogg_staticd.lib" )
-		set( ogg_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libogg-1.3.3/include" )
-		set( ogg_RELEASE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libogg-1.3.3/lib/x86/libogg_static.lib" )
-		set( vorbisFILE_DEBUG_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/lib/x86/libvorbisfile_staticd.lib" )
-		set( vorbisFILE_RELEASE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/lib/x86/libvorbisfile_static.lib" )
-		set( vorbis_DEBUG_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/lib/x86/libvorbis_staticd.lib" )
-		set( vorbis_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/include" )
-		set( vorbis_RELEASE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/lib/x86/libvorbis_static.lib" )
-		set( ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/zlib-1.2.11/include" )
-		set( ZLIB_LIBRARY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/zlib-1.2.11/lib/x86/zlibstatic.lib" )
-		set( ZLIB_LIBRARY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/zlib-1.2.11/lib/x86/zlibstatic.lib" )
-	else()
 		#set (kitchensink_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/kitchensink/include")
 		#set (kitchensink_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/kitchensink/lib/SDL_kitchensink_static.lib")
-		set( SDL_NET_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/SDL_net-2.0.1/lib/x64/SDL2_net.lib" )
-		set( ogg_DEBUG_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libogg-1.3.3/lib/x64/libogg_staticd.lib" )
-		set( ogg_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libogg-1.3.3/include" )
-		set( ogg_RELEASE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libogg-1.3.3/lib/x64/libogg_static.lib" )
-		set( vorbisFILE_DEBUG_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/lib/x64/libvorbisfile_static.lib" )
-		set( vorbisFILE_RELEASE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/lib/x64/libvorbisfile_static.lib" )
-		set( vorbis_DEBUG_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/lib/x64/libvorbis_static.lib" )
-		set( vorbis_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/include" )
-		set( vorbis_RELEASE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/libvorbis-1.3.6/lib/x64/libvorbis_static.lib" )
-		set( ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/zlib-1.2.11/include" )
-		set( ZLIB_LIBRARY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/zlib-1.2.11/lib/x64/zlibstatic.lib" )
-		set( ZLIB_LIBRARY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/zlib-1.2.11/lib/x64/zlibstatic.lib" )
 	endif()
 		include("${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/SDL2/sdl-config.cmake")
 		set( SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/SDL2")
 		set( SDLNET_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/msvc/SDL_net-2.0.1/include" )
-
-endif(MSVC)
+endif(FORCE_STATIC_MSVC_LIBS)
 
 if(UNIX)
-	set(ogg_RELEASE_LIBRARY "libvorbisfile.so" )
-	set(SDL2_INCLUDE_DIRS /usr/include/SDL2)
-	set(SDL2_LIBRARIES /usr/lib/x86_64-linux-gnu/libSDL2.so)
+	if(APPLE)
+		set(ogg_RELEASE_LIBRARY "libvorbisfile.dylib" )
+	else(APPLE)
+		set(ogg_RELEASE_LIBRARY "libvorbisfile.so" )
+	endif(APPLE)
+		#set( PHYSFS_LIBRARY "libphysfs.so" )
+	#set(SDL2_INCLUDE_DIR /usr/include/SDL2)
+	#set(SDL2_LIBRARIES /usr/lib/libSDL2.so)
 	find_package(SDL2 REQUIRED)
 endif(UNIX)
-
 
 #INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/src ${SDL2_INCLUDE_DIRS})
 
 ## SDL2
 #set(SDL2_PATH "${CMAKE_CURRENT_SOURCE_DIR/SDL2-2.0.9}" CACHE PATH “The location to search for SDL2”)
-INCLUDE_DIRECTORIES (${SDL2_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES (${SDL2_INCLUDE_DIR})
 
 ## FIND_PACKAGE (SDL_net REQUIRED)
 INCLUDE_DIRECTORIES (${SDLNET_INCLUDE_DIR})
+
+INCLUDE_DIRECTORIES (${PHYSFS_INCLUDE_DIR})
+
+INCLUDE_DIRECTORIES (${FLTK_INCLUDE_DIR})
 
 ## FIND FFMPEG AND KITCHENSINK INCLUDES
 ##INCLUDE_DIRECTORIES (${FFMPEG_INCLUDE_DIR})
 ##INCLUDE_DIRECTORIES (${SDLKitchensink_INCLUDE_DIRS})
 
 # OpenGL
-FIND_PACKAGE (OpenGL)
+if (NOT VITA)
+    if(POLICY CMP0072)
+        cmake_policy(SET CMP0072 NEW)
+    endif()
+    FIND_PACKAGE (OpenGL)
+elseif(VITA)
+    FIND_PACKAGE (VitaGL)
+endif()
 
-# libvorbis/libogg
-include_directories(
-	${ogg_INCLUDE_DIR}
-	${vorbis_INCLUDE_DIR}
-)
 
 # zlib
-#find_package(ZLIB REQUIRED)
-include_directories(${ZLIB_INCLUDE_DIR})
+find_package(ZLIB REQUIRED)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/miniz)
+
+# dumb
+#include_directories(${LIBDUMB_INCLUDE_DIR})
 
 # EDGE
-include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/sse2neon)
 set(EDGE_SOURCES
 	coal/c_compile.cc
 	coal/c_execute.cc
@@ -306,6 +438,7 @@ set(EDGE_SOURCES
 	ddf/attack.cc
 	ddf/boom.cc
 	ddf/colormap.cc
+	ddf/flat.cc
 	ddf/font.cc
 	ddf/game.cc
 	ddf/image.cc
@@ -347,6 +480,7 @@ set(EDGE_SOURCES
 	src/system/i_video.cc
 	src/system/i_sound.cc
 	src/system/i_net.cc
+	src/system/i_timer.cc
 	src/system/i_x86.cc
 	src/system/i_cinematic.cc
 	src/system/i_ffmpeg.cc
@@ -355,7 +489,6 @@ set(EDGE_SOURCES
 	src/am_map.cc
 	src/con_con.cc
 	src/con_main.cc
-	src/con_link.cc
 	src/con_var.cc
 	src/dem_chunk.cc
 	src/dem_glob.cc
@@ -372,7 +505,8 @@ set(EDGE_SOURCES
 	src/hu_font.cc
 	src/hu_stuff.cc
 	src/hu_style.cc
-	src/l_glbsp.cc
+	src/l_ajbsp.cc   
+	#src/l_glbsp.cc
 	src/l_deh.cc
 	src/m_argv.cc
 	src/m_bbox.cc
@@ -439,15 +573,22 @@ set(EDGE_SOURCES
 	src/r_postprocessstate.cc
 	src/r_shaderprogram.cc
 	src/r_lensdistortion.cc
+	src/r_qbb.cc
+	src/r_qvf.cc
 	src/r_fxaa.cc
 	src/r_bloom.cc
 	src/s_blit.cc
+	#src/s_dumb.cc
 	src/s_cache.cc
+	src/s_gme.cc
 	src/s_sound.cc
+	src/s_mp3.cc
 	src/s_music.cc
 	src/s_ogg.cc
 	src/s_opl.cc
-	src/s_timid.cc
+	src/s_sid.cc
+	src/s_tsf.cc
+	src/s_xmp.cc
 	src/sv_chunk.cc
 	src/sv_glob.cc
 	src/sv_level.cc
@@ -482,6 +623,10 @@ set(EDGE_SOURCES
 	src/md5_conv/md5_draw.cc
 	epi/kmq2/epi_quake2stuff.cc
 
+	#src/utility/lib_file.cc
+	#src/utility/lib_util.cc
+	src/utility/m_strings.cc
+
 	epi/arrays.cc
 	epi/bytearray.cc
 	epi/exe_path.cc
@@ -515,44 +660,20 @@ set(EDGE_SOURCES
 	epi/timestamp.cc
 	epi/utility.cc
 	
-	# Note we only support file formats from physFS in EDGE that will be used!
-	#- all others were stripped! 
-	epi/physfs/physfs.c
-    epi/physfs/physfs_byteorder.c
-    epi/physfs/physfs_unicode.c
-	epi/physfs/physfs_platform_posix.c #// !!!
-    epi/physfs/physfs_archiver_dir.c
-    epi/physfs/physfs_archiver_unpacked.c
-    epi/physfs/physfs_archiver_grp.c
-    epi/physfs/physfs_archiver_7z.c
-    epi/physfs/physfs_archiver_qpak.c
-    epi/physfs/physfs_archiver_wad.c
-    epi/physfs/physfs_archiver_zip.c
-    epi/physfs/physfs_archiver_iso9660.c
-
-	glbsp/src/analyze.cc
-	glbsp/src/blockmap.cc
-	glbsp/src/glbsp.cc
-	glbsp/src/level.cc
-	glbsp/src/node.cc
-	glbsp/src/reject.cc
-	glbsp/src/seg.cc
-	glbsp/src/system.cc
-	glbsp/src/util.cc
-	glbsp/src/wad.cc
-
-	src/system/sound/timidity/common.cc
-	src/system/sound/timidity/instrum.cc
-	src/system/sound/timidity/mix.cc
-	src/system/sound/timidity/playmidi.cc
-	src/system/sound/timidity/loadmidi.cc
-	src/system/sound/timidity/resample.cc
-	src/system/sound/timidity/tables.cc
-	src/system/sound/timidity/timidity.cc
+	#glbsp/src/analyze.cc
+	#glbsp/src/blockmap.cc
+	#glbsp/src/glbsp.cc
+	#glbsp/src/level.cc
+	#glbsp/src/node.cc
+	#glbsp/src/reject.cc
+	#glbsp/src/seg.cc
+	#glbsp/src/system.cc
+	#glbsp/src/util.cc
+	#glbsp/src/wad.cc
 
 	src/system/sound/opllib/opl3.cc
 	src/system/sound/opllib/oplapi.cc
-
+	
 )
 
 
@@ -565,7 +686,7 @@ set(EDGE_WIN32_SOURCES
 	src/system/win32/i_exception.cc
 	epi/epi_win32.cc
 	epi/filesystem_win32.cc
-	epi/physfs/physfs_platform_windows.c
+	#epi/physfs/physfs_platform_windows.c
 )
 
 set(EDGE_UNIX_SOURCES
@@ -575,7 +696,7 @@ set(EDGE_UNIX_SOURCES
 	src/system/unx/unx_system.cc
 	epi/filesystem_linux.cc
 	epi/epi_linux.cc
-	epi/physfs/physfs_platform_unix.c
+	#epi/physfs/physfs_platform_unix.c
 )
 
 set(EDGE_DREAMCAST_SOURCES
@@ -586,11 +707,21 @@ set(EDGE_DREAMCAST_SOURCES
 	src/i_main.cc
 )
 
+set(EDGE_VITA_SOURCES
+	#src/system/vita/neon_math.cc
+	#src/system/unx/unx_music.cc
+	#src/system/unx/unx_net.cc
+	#src/system/unx/unx_system.cc
+	#epi/filesystem_linux.cc
+	#epi/epi_linux.cc
+	#epi/physfs/physfs_platform_unix.c
+)
+
 if (APPLE)
 	set(EDGE_UNIX_SOURCES
 		${EDGE_UNIX_SOURCES}
 		src/system/unx/mac/mac_ui.mm
-		epi/physfs/physfs_platform_apple.m
+		#epi/physfs/physfs_platform_apple.m
 	)
 endif()
 
@@ -600,6 +731,15 @@ if(WIN32)
 	set(EDGE_SOURCES ${EDGE_SOURCES}
 		${EDGE_WIN32_SOURCES}
 	)
+	if(MSVC)
+		set(EDGE_SOURCES ${EDGE_SOURCES}
+			src/system/win32/w32_manifest.manifest
+		)
+	else()
+		set(EDGE_SOURCES ${EDGE_SOURCES}
+			src/system/win32/w32_manifest_mgw.rc
+		)	
+	endif()
 elseif(UNIX)
 	set(EDGE_SOURCES ${EDGE_SOURCES}
 		${EDGE_UNIX_SOURCES}
@@ -608,27 +748,72 @@ elseif(DREAMCAST)
 	set(EDGE_SOURCES ${EDGE_SOURCES}
 		${EDGE_DREAMCAST_SOURCES}
 	)
+elseif(VITA)
+	set(EDGE_SOURCES ${EDGE_SOURCES}
+		${EDGE_VITA_SOURCES}
+	)
 endif()
 
 add_executable(EDGE
 	${EDGE_SOURCES}
 )
 
+if(MINGW AND MINGW_LINK_STATiIC)
+	set_target_properties(EDGE PROPERTIES LINK_SEARCH_START_STATIC 1)
+	set_target_properties(EDGE PROPERTIES LINK_SEARCH_END_STATIC 1)
+endif()
+
+if (NOT VITA)
 add_dependencies( EDGE revision_check )
+endif()
 if(MSVC)
 	add_dependencies( EDGE eecrashreport )
 endif()
 
+#copy base folder to build root
+add_custom_command(TARGET EDGE POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory
+                       ${CMAKE_SOURCE_DIR}/data/base $<TARGET_FILE_DIR:${PROJECT_NAME}>/base)
+
+#copy soundfont folder to build root (Not sure where you want this in the final iteration - Dasho)
+add_custom_command(TARGET EDGE POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory
+                       ${CMAKE_SOURCE_DIR}/data/soundfont $<TARGET_FILE_DIR:${PROJECT_NAME}>/soundfont)
+
+target_include_directories(EDGE 
+	PRIVATE
+	deps/libgme/gme
+    deps/libxmp-lite
+    deps/libwebsid
+	deps/minivorbis
+	deps/miniz
+	src/edge_ajbsp
+)
 
 target_link_libraries(EDGE
-	${SDL2_LIBRARIES}
+	edge_ajbsp
+	${LIBGME_LIBRARIES}
+	libxmp-lite
+	libwebsid
+	${SDL2_LIBRARY}
 	${SDL_NET_LIBRARY}
-	${ogg_RELEASE_LIBRARY}
-	${vorbis_RELEASE_LIBRARY}
-	${vorbisFILE_RELEASE_LIBRARY}
-	${ZLIB_LIBRARY_RELEASE}
-#	${SDLKitchensink_STATIC_LIBRARY}
+	ZLIB::ZLIB
+	${PHYSFS_LIBRARY}
+#	Ogg::ogg
+#	Vorbis::vorbis Vorbis::vorbisenc Vorbis::vorbisfile
+#	${VORBIS_LIBRARIES} ${VORBISFILE_LIBRARIES}
+	#	${LIBDUMB_LIBRARY}
+	#	${SDLKitchensink_STATIC_LIBRARY}
 )
+
+
+if(MINGW)
+	set(MINGW_BUILD_EDGE_TARGET_PROPERTIES "-Wl,-subsystem,windows")
+	if(MINGW_LINK_STATIC)
+		set(MINGW_BUILD_EDGE_TARGET_PROPERTIES "${MINGW_BUILD_EDGE_TARGET_PROPERTIES} -static-libgcc -static-libstdc++ -static")
+	endif()
+	set_target_properties(EDGE PROPERTIES LINK_FLAGS "${MINGW_BUILD_EDGE_TARGET_PROPERTIES}")
+endif()
 
 if (WIN32)
 	target_link_libraries(EDGE
@@ -636,26 +821,42 @@ if (WIN32)
 		winmm
 		gdi32
 		opengl32
+		Imm32
+		Setupapi
+		Version
 	)
 elseif(APPLE)
-	set_target_properties(EDGE PROPERTIES LINK_FLAGS "-framework OpenGL -framework Cocoa")
+	set_target_properties(EDGE PROPERTIES LINK_FLAGS "-framework OpenGL -framework Cocoa -framework IOKit")
+	target_link_libraries(EDGE stdc++ "-framework Foundation" "-framework Cocoa" "-framework IOKIT" objc)
+elseif(VITA)
+	target_link_libraries(EDGE SDL2 vitaGL SceDisplay_stub SceCtrl_stub SceAudio_stub SceSysmodule_stub SceGxm_stub SceCommonDialog_stub SceTouch_stub SceHid_stub m)
 elseif(NOT ${CMAKE_SYSTEM_NAME} MATCHES "(Free|Open)BSD")
-	target_link_libraries(EDGE SDL2 GL dl)
+	target_link_libraries(EDGE SDL2 OpenGL::GL dl)
 endif()
 
-if(MSVC)
-   target_link_libraries(EDGE rpcrt4)
-endif()
+#if(MSVC)
+#   target_link_libraries(EDGE rpcrt4)
+#endif()
 
+if (NOT VITA)
 INSTALL (TARGETS EDGE
         RUNTIME DESTINATION ${BIN_DIR}
         LIBRARY DESTINATION ${LIB_DIR}
         ARCHIVE DESTINATION ${LIB_DIR})
 
 INSTALL (DIRECTORY ${CMAKE_SOURCE_DIR}/data/base
-        DESTINATION ${LIB_DIR}
+        DESTINATION ${PROJECT_BINARY_DIR}
         PATTERN "delete.me" EXCLUDE
         PATTERN ".svn" EXCLUDE)
-
+elseif(VITA)
+vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME})
+vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
+  VERSION ${VITA_VERSION}
+  NAME ${VITA_APP_NAME}
+  FILE sce_sys/icon0.png sce_sys/icon0.png
+  FILE sce_sys/livearea/contents/bg.png sce_sys/livearea/contents/bg.png
+  FILE sce_sys/livearea/contents/startup.png sce_sys/livearea/contents/startup.png
+  FILE sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
+)
+endif()
 ## EOF
-

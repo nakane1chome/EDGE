@@ -32,6 +32,7 @@
 #include "r_image.h"
 #include "r_misc.h"     //  R_Render
 #include "r_renderbuffers.h"
+#include "r_postprocessstate.h"
 
 
 #define DUMMY_WIDTH(font)  (4)
@@ -108,6 +109,8 @@ void HUD_SetAlignment(int xa, int ya)
 
 void HUD_Reset()
 {
+	//FGLRenderBuffers ClearScene();
+	//auto renderbuffers = FGLRenderBuffers::Instance();
 	HUD_SetCoordSys(320, 200);
 
 	cur_font  = default_font;
@@ -133,7 +136,7 @@ void HUD_FrameSetup(int split)
 	HUD_Reset();
 
 	// determine pixel_aspect
-	float aspect = CLAMP(0.2, r_aspect.f, 5.0);
+	float aspect = CLAMP(0.2, r_aspect, 5.0);
 
 	if (FULLSCREEN)
 	{
@@ -162,13 +165,17 @@ void HUD_FrameSetup(int split)
 	margin_X = (SCREENWIDTH  - margin_W) / 2.0;
 	margin_Y = (SCREENHEIGHT + margin_H) / 2.0;
 
-	//TODO: make this a menu option - to split the screen vertically or horizontally for two player!
-	/// split 1 means viewport 1, split 2 means viewport 2
-	if (split == 2)
-		margin_X += margin_W / 2;
+	if (splitscreen_mode)
+	{
+		//TODO: make this a menu option - to split the screen vertically or horizontally for two player!
+		/// split 1 means viewport 1, split 2 means viewport 2
+		if (split == 2)
+			margin_X += margin_W / 2;
 
-	if (split == 1 || split == 2)
-		margin_W = margin_W / 2 - 8;
+		if (split == 1 || split == 2)
+			margin_W = margin_W / 2 - 8;
+	}
+	
 }
 
 
@@ -322,7 +329,8 @@ void HUD_RawImage(float hx1, float hy1, float hx2, float hy2,
 			glAlphaFunc(GL_GREATER, alpha * 0.66f);
 	}
 
-	if (image->opacity != OPAC_Solid || alpha < 0.99f)
+	//if (image->opacity != OPAC_Solid || alpha < 0.99f)
+	if (image->opacity == OPAC_Complex || alpha < 0.99f)
 		glEnable(GL_BLEND);
 
 	glColor4f(r, g, b, alpha);
@@ -372,6 +380,32 @@ void HUD_StretchImage(float x, float y, float w, float h, const image_c *img)
     HUD_RawImage(x1, y1, x2, y2, img, 0, 0, IM_RIGHT(img), IM_TOP(img), cur_alpha);
 }
 
+void HUD_DrawImageTitleWS(const image_c *title_image)
+{
+	
+	//Lobo: Widescreen titlescreen support.
+	//In the case of titlescreens we will ignore any scaling
+	//set in DDFImages and always calculate our own.
+	//This is to ensure that we always get 200 height.
+	//The width we don't care about, hence widescreen ;)
+	float TempWidth = 0;
+	float TempHeight = 0;
+	float TempScale = 0;
+	float CenterX = 0;
+
+	//1. Calculate scaling to apply.
+	TempScale = 200;
+	TempScale /= title_image->actual_h;
+	TempWidth = title_image->actual_w * TempScale;
+	TempHeight = title_image->actual_h * TempScale;
+	
+	//2. Calculate centering on screen.
+	CenterX = 160;
+	CenterX -= (title_image->actual_w * TempScale)/ 2;
+
+	//3. Draw it.
+	HUD_StretchImage(CenterX, 0, TempWidth, TempHeight, title_image);
+}
 
 void HUD_DrawImage(float x, float y, const image_c *img)
 {

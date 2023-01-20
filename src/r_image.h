@@ -62,6 +62,13 @@ typedef enum
 image_opacity_e;
 
 //class image_data_c;
+typedef enum
+{
+	LIQ_None = 0,
+	LIQ_Thin = 1,
+	LIQ_Thick = 2
+}
+liquid_type_e;
 
 class image_c
 {
@@ -91,6 +98,9 @@ public:
     // one of the OPAC_XXX values
 	int opacity;
 
+	liquid_type_e liquid_type;
+
+	int swirled_gametic;
 
 //!!!!!! private:
 
@@ -105,6 +115,7 @@ public:
 		// case IMSRC_ROTTGFX:
 		// case IMSRC_Sprite:
 		// case IMSRC_TX_HI:
+		// case IMSRC_Wide
 		struct { int lump; bool is_png; } graphic;
 
 
@@ -223,6 +234,17 @@ extern int  var_smoothing;
 extern bool var_dithering;
 extern int  hq2x_scaling;
 
+typedef enum
+{
+	SWIRL_Vanilla = 0,
+	SWIRL_SMMU = 1,
+	SWIRL_SMMUSWIRL = 2,
+	SWIRL_PARALLAX = 3
+}
+swirl_type_e;
+
+extern swirl_type_e swirling_flats;
+
 bool W_InitImages(void);
 void W_UpdateImageAnims(void);
 void W_DeleteAllImages(void);
@@ -266,10 +288,13 @@ typedef enum
 	IMSRC_ROTTLBM,
 
 	// Rise of the Triad LPIC, which is raw with a small header
-	IMSRC_rottpic, 
+	IMSRC_rottpic,
 
 	// INTERNAL ONLY: Source was a raw block of 320x200 bytes (Heretic/Hexen)
 	IMSRC_Raw320x200,
+
+	// INTERNAL ONLY: Source was a raw block of 560x200 bytes (Widescreen Title Graphics)
+	IMSRC_WideTitle560x200,
 
 	// INTERNAL ONLY: Source was a raw block of 64x64 bytes (Wolfenstein3D)
 	IMSRC_WolfRaw64x64,

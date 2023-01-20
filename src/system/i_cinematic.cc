@@ -29,6 +29,7 @@
 #include "i_defs_gl.h"
 #include "i_sdlinc.h"
 #include "i_system.h"
+#include "i_sound.h"
 #include "i_cinematic.h"
 
 #include "dm_state.h"
@@ -78,7 +79,7 @@ bool playing_movie = false;
 
 static SDL_AudioSpec mydev;
 
-extern int sfx_volume;
+extern int au_sfx_volume;
 extern float slider_to_gain[];
 
 #define DEBUG_ROQ_READER
@@ -97,6 +98,7 @@ static void MovieSnd_Callback(void *udata, Uint8 *stream, int len)
 static bool CIN_TryOpenSound(int rate)
 {
 	SDL_AudioSpec firstdev;
+	SDL_zero(firstdev);
 
 	SDL_CloseAudio();
 
@@ -115,6 +117,10 @@ static bool CIN_TryOpenSound(int rate)
 	firstdev.samples = samples;
 	firstdev.callback = MovieSnd_Callback;
 
+	mydev_id = SDL_OpenAudioDevice(NULL, 0, &firstdev, &mydev, 0);
+
+
+	if (mydev_id >= 0)
 	if (SDL_OpenAudio(&firstdev, &mydev) >= 0)
 	{
 		SDL_PauseAudio(0);
@@ -1521,7 +1527,7 @@ void CIN_UpdateAudio(Uint8 *stream, int len)
 		if (wanted <= cin->nextSample)
 		{
 			for (j = 0; j < wanted; j++)
-				dst[j] = (float)cin->soundSamples[j] * slider_to_gain[sfx_volume] * 0.000030518f;
+				dst[j] = (float)cin->soundSamples[j] * slider_to_gain[au_sfx_volume] * 0.000030518f;
 			if (wanted < cin->nextSample)
 				memcpy(cin->soundSamples, &cin->soundSamples[wanted], (cin->nextSample - wanted) * 2);
 			cin->nextSample -= wanted;
@@ -1529,7 +1535,7 @@ void CIN_UpdateAudio(Uint8 *stream, int len)
 		else
 		{
 			for (j = 0; j < cin->nextSample; j++)
-				dst[j] = (float)cin->soundSamples[j] * slider_to_gain[sfx_volume] * 0.000030518f;
+				dst[j] = (float)cin->soundSamples[j] * slider_to_gain[au_sfx_volume] * 0.000030518f;
 			cin->nextSample = 0;
 
 			for (; j < wanted; j++)

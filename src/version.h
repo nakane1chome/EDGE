@@ -34,27 +34,39 @@ const char *GetVersionString();
 #define EDGEVERSTR "2.1.0 - TEST3"
 #endif
 
+#ifdef __clang__
+#define EDGECOMPILER "Clang"
+#elif defined(__GNUC__)
+#define EDGECOMPILER "GCC"
+#elif defined(_MSC_VER)
+#define EDGECOMPILER "MSVC"
+#endif
+
 // Build Platform Strings (Visual Studio/Windows)
 #ifdef _MSC_VER
+
 #ifdef _M_X64
-#define EDGEPLATFORM "x64"
+#define EDGEPLATFORM "x64 " EDGECOMPILER
 #define EDGEPRINTBIT "64-bit"
 #define E_TITLE "EDGE (64-bit)" EDGEVERSTR
 #elif _M_IX86
-#define EDGEPLATFORM "x86"
+#define EDGEPLATFORM "x86 " EDGECOMPILER
 #define EDGEPRINTBIT "32-bit"
 #define E_TITLE "EDGE (32-bit)" EDGEVERSTR
 #endif
-#endif
 
-// Build Platform Strings (GCC/Linux, et al)
-#ifdef LINUX
+#else
+// Build Platform Strings (GCC/Linux, GCC/Windows, et al)
 #ifdef __i386__
-#define EDGEPLATFORM "x86"
+#define EDGEPLATFORM "x86 " EDGECOMPILER
 #define EDGEPRINTBIT "32-bit"
 #define E_TITLE "EDGE (32-bit)"  EDGEVERSTR
 #elif __x86_64__
-#define EDGEPLATFORM "x64"
+#define EDGEPLATFORM "x64 " EDGECOMPILER
+#define EDGEPRINTBIT "64-bit"
+#define E_TITLE "EDGE (64-bit)"  EDGEVERSTR
+#elif __aarch64__
+#define EDGEPLATFORM "ARM64 " EDGECOMPILER
 #define EDGEPRINTBIT "64-bit"
 #define E_TITLE "EDGE (64-bit)"  EDGEVERSTR
 #else

@@ -19,7 +19,6 @@
 #ifndef __SYSTEM_LOCAL_H__
 #define __SYSTEM_LOCAL_H__
 
-
 // I_CTRL
 void I_CentreMouse();
 

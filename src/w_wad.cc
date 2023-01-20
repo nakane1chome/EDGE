@@ -1,9 +1,9 @@
 //----------------------------------------------------------------------------
 //  EDGE Packed Data Support Code
-//  WAD, PAK, ZIP, WL6 (Wolfenstein) Handler
+//  WAD, EPK, PAK, ZIP, PK3/PK7, WL6, PhysFS Handler
 //----------------------------------------------------------------------------
 //
-//  Copyright (c) 1999-2018  The EDGE Team.
+//  Copyright (c) 1999-2021  The EDGE Team.
 //
 //  This program is free software; you can redistribute it and/or
 //  modify it under the terms of the GNU General Public License
@@ -52,6 +52,7 @@
 #include "../ddf/main.h"
 #include "../ddf/anim.h"
 #include "../ddf/colormap.h"
+#include "ddf/flat.h"
 #include "../ddf/font.h"
 #include "../ddf/image.h"
 #include "../ddf/style.h"
@@ -65,7 +66,7 @@
 #include "e_main.h"
 #include "e_search.h"
 #include "l_deh.h"
-#include "l_glbsp.h"
+#include "l_ajbsp.h"
 #include "m_misc.h"
 #include "r_image.h"
 #include "rad_trig.h"
@@ -75,9 +76,13 @@
 #include "w_wad.h"
 #include "z_zone.h"
 
+#ifdef HAVE_PHYSFS
+#include <physfs.h>
+#endif
 
-extern void CreatePlaypal(); //Wolfenstein 3D 
+extern void CreatePlaypal(); //Wolfenstein 3D
 extern void CreateROTTpal(); // Rise of the Triad
+//extern std::string iwad_base;
 
 // -KM- 1999/01/31 Order is important, Languages are loaded before sfx, etc...
 typedef struct ddf_reader_s
@@ -106,6 +111,7 @@ static ddf_reader_t DDF_Readers[] =
 	{ "DDFANIM", "Anims",      DDF_ReadAnims },
 	{ "DDFGAME", "Games",      DDF_ReadGames },
 	{ "DDFLEVL", "Levels",     DDF_ReadLevels },
+	{ "DDFFLAT", "Flats",     DDF_ReadFlat },
 	{ "RSCRIPT", "RadTrig",    RAD_ReadScript }       // -AJA- 2000/04/21.
 };
 
@@ -202,7 +208,7 @@ public:
 public:
 	data_file_c(const char *_fname, int _kind, epi::file_c* _file) :
 		file_name(_fname), kind(_kind), file(_file),
-		sprite_lumps(), flat_lumps(), patch_lumps(), 
+		sprite_lumps(), flat_lumps(), patch_lumps(),
 		colmap_lumps(), tx_lumps(), hires_lumps(),
 		lbm_lumps(), rottpic_lumps(), rottraw_flats(),
 		level_markers(), skin_markers(),
@@ -241,8 +247,8 @@ public:
 };
 
 static std::list<raw_filename_c *> wadfiles;
-static std::list<raw_filename_c *> r_pak_fp;
-static std::list<raw_filename_c *> raw_wl6;
+//static std::list<raw_filename_c *> r_pak_fp;
+static std::list<raw_filename_c *> wl6files;
 
 typedef enum
 {
@@ -286,7 +292,7 @@ typedef struct
 #ifdef HAVE_PHYSFS
 	// pathname for PHYSFS file - wasteful, but no biggy on a PC
 	char path[256];
-	
+
 #endif
 }
 lumpinfo_t;
@@ -298,12 +304,12 @@ lumpinfo_t;
 //
 
 // Location of each lump on disk.
-lumpinfo_t *lumpinfo;
+static std::vector<lumpinfo_t> lumpinfo;
 static int *lumpmap = NULL;
 int numlumps;
 
 #define LUMP_MAP_CMP(a) (strncmp(lumpinfo[lumpmap[a]].name, buf, 8))
-//#define SHADER_MAP_CMP(a) (strncmp(lumpinfo[lumpmap[a]].fullname, buf, 8))
+
 
 typedef struct lumpheader_s
 {
@@ -395,14 +401,14 @@ static bool IsS_END(char *name)
 		return 1;
 	}
 
-	if (strncmp(name, "SS_END", 8) == 0) 
+	if (strncmp(name, "SS_END", 8) == 0)
 	{
 		// fix up flag to standard syntax
 		strncpy(name, "S_END", 8);
 		return 1;
 	}
 
-	return (strncmp(name, "S_END", 8) == 0); 
+	return (strncmp(name, "S_END", 8) == 0);
 }
 
 //
@@ -914,7 +920,7 @@ static bool IsRawROTT(const char *name)
 //
 static bool IsDummySF(const char *name)
 {
-	return (strncmp(name, "S1_START", 8) == 0 ||  
+	return (strncmp(name, "S1_START", 8) == 0 ||
 		strncmp(name, "S2_START", 8) == 0 ||
 		strncmp(name, "S3_START", 8) == 0 ||
 		strncmp(name, "F1_START", 8) == 0 ||
@@ -1075,11 +1081,11 @@ static void SortLumps(void)
 	// file number, thirdly by the lump type.
 
 #define CMP(a, b)  \
-    (strncmp(lumpinfo[a].name, lumpinfo[b].name, 8) < 0 ||    \
-     (strncmp(lumpinfo[a].name, lumpinfo[b].name, 8) == 0 &&  \
-      (lumpinfo[a].sort_index > lumpinfo[b].sort_index ||     \
+	(strncmp(lumpinfo[a].name, lumpinfo[b].name, 8) < 0 ||    \
+	 (strncmp(lumpinfo[a].name, lumpinfo[b].name, 8) == 0 &&  \
+	  (lumpinfo[a].sort_index > lumpinfo[b].sort_index ||     \
 	   (lumpinfo[a].sort_index == lumpinfo[b].sort_index &&   \
-        lumpinfo[a].kind > lumpinfo[b].kind))))
+		lumpinfo[a].kind > lumpinfo[b].kind))))
 	QSORT(int, lumpmap, numlumps, CUTOFF);
 #undef CMP
 
@@ -1190,7 +1196,7 @@ static void AddLumpEx(data_file_c *df, int lump, int pos, int size, int file,
 	int sort_index, const char *name, bool allow_ddf, const char *path)
 {
 	int j;
-	lumpinfo_t *lump_p = lumpinfo + lump;
+	lumpinfo_t *lump_p = &lumpinfo[lump];
 	image_c *rim;
 
 	lump_p->position = pos;
@@ -1201,7 +1207,8 @@ static void AddLumpEx(data_file_c *df, int lump, int pos, int size, int file,
 
 	Z_StrNCpy(lump_p->name, name, 8);
 
-	strupr(lump_p->name);
+	for (size_t i=0;i<strlen(lump_p->name);i++) 
+		lump_p->name[i] = toupper(lump_p->name[i]);
 
 	// strip any extension
 	for (j = 7; j >= 0; j--)
@@ -1233,10 +1240,10 @@ static void AddLumpEx(data_file_c *df, int lump, int pos, int size, int file,
 	// -CA- 10.29.18:
 	// UGLY HACKS INBOUND! Basically this looks up a table of entries from the wad since ROTT doesn't always
 	// have matching start and end markers. TODO: in the markers code, make an end marker -1 of current entry. Eh,
-	// since they are scattered all over the place, this will take some thought if we want it done nicer. 
+	// since they are scattered all over the place, this will take some thought if we want it done nicer.
 
-	else if ((strncmp(lump_p->name, "BOOTBLOD", 8) == 0) || 
-		(strncmp(lump_p->name, "IMFREE", 8) == 0) || 
+	else if ((strncmp(lump_p->name, "BOOTBLOD", 8) == 0) ||
+		(strncmp(lump_p->name, "IMFREE", 8) == 0) ||
 		(strncmp(lump_p->name, "BOOTNORM", 8) == 0) ||
 		 (strncmp(lump_p->name, "DEADBOSS", 8) == 0))
 	{
@@ -1246,7 +1253,7 @@ static void AddLumpEx(data_file_c *df, int lump, int pos, int size, int file,
 		return;
 	}
 
-	
+
 	else if ((strncmp(lump_p->name, "AMMO18", 8) == 0) ||
 		(strncmp(name, "AMMO1C", 8) == 0) ||
 		(strncmp(name, "AMMO2B", 8) == 0) ||
@@ -1700,6 +1707,12 @@ static void AddLumpEx(data_file_c *df, int lump, int pos, int size, int file,
 			lump_p->kind = LMKIND_Patch;
 			df->patch_lumps.Insert(lump);
 		}
+    
+		if (within_colmap_list)
+		{
+			lump_p->kind = LMKIND_Colmap;
+			df->colmap_lumps.Insert(lump);
+		}
 
 		if (within_tex_list)
 		{
@@ -1848,15 +1861,12 @@ static bool FindCacheFilename(std::string& out_name,
 	const char *extension)
 {
 	std::string wad_dir;
-	std::string pak_dir;
-	std::string wolf_dir;
 	std::string hash_string;
 	std::string local_name;
 	std::string cache_name;
 
 	// Get the directory which the wad is currently stored
 	wad_dir = epi::PATH_GetDir(filename);
-	wolf_dir = epi::PATH_GetDir(filename);
 
 	// Hash string used for files in the cache directory
 	hash_string = epi::STR_Format("-%02X%02X%02X-%02X%02X%02X",
@@ -1890,12 +1900,12 @@ static bool FindCacheFilename(std::string& out_name,
 	// If neither exist, create one in the cache directory.
 
 	// Check whether the waddir gwa is out of date
-	if (has_local)
-		has_local = (L_CompareFileTimes(filename, local_name.c_str()) <= 0);
+	//if (has_local)
+	//	has_local = (L_CompareFileTimes(filename, local_name.c_str()) <= 0);
 
 	// Check whether the cached gwa is out of date
-	if (has_cache)
-		has_cache = (L_CompareFileTimes(filename, cache_name.c_str()) <= 0);
+	//if (has_cache)
+	//	has_cache = (L_CompareFileTimes(filename, cache_name.c_str()) <= 0);
 
 	I_Debugf("FindCacheFilename: has_local=%s  has_cache=%s\n",
 		has_local ? "YES" : "NO", has_cache ? "YES" : "NO");
@@ -1919,13 +1929,14 @@ static bool FindCacheFilename(std::string& out_name,
 //
 // File_Info
 //
-typedef struct 
+typedef struct
 {
 	data_file_c *dfile;
 	const char *name;
 	int kind;
 	int index;
 	int dfindex;
+	bool is_named = true;
 } file_info_t;
 
 static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origDir, const char *fname);
@@ -1937,10 +1948,10 @@ static bool Check_isDirectory(const char *fname)
 	return fstat.filetype == PHYSFS_FILETYPE_DIRECTORY ? true : false;
 }
 
-static PHYSFS_EnumerateCallbackResult LumpNamespace(void *userData, const char *origDir, const char *fname)
+static PHYSFS_EnumerateCallbackResult LumpNamespace(void* userData, const char* origDir, const char* fname)
 {
 #ifdef HAVE_PHYSFS
-	file_info_t *user_data = (file_info_t *)userData;
+	file_info_t* user_data = (file_info_t*)userData;
 	char path[256];
 	strcpy(path, origDir);
 	strcat(path, "/");
@@ -1955,6 +1966,29 @@ static PHYSFS_EnumerateCallbackResult LumpNamespace(void *userData, const char *
 		return PHYSFS_ENUM_OK;
 	}
 
+	//switch( tolower(iwad_base.c_str()))
+#if 0
+	if (game_mode_doom)
+	{
+		if (stricmp(fname, "doom") == 0)
+		{
+			// recurse rott subdirectory to TopLevel
+			PHYSFS_enumerate(path, LumpNamespace, userData);
+			return PHYSFS_ENUM_OK;
+		}
+	}
+
+	else if (game_mode_doom2)
+	{
+		if (stricmp(fname, "doom2") == 0)
+		{
+			// recurse rott subdirectory to TopLevel
+			PHYSFS_enumerate(path, LumpNamespace, userData);
+			return PHYSFS_ENUM_OK;
+		}
+	}
+#endif // 0
+
 	if (wolf3d_mode)
 	{
 		if (stricmp(fname, "wolf3d") == 0)
@@ -1964,7 +1998,6 @@ static PHYSFS_EnumerateCallbackResult LumpNamespace(void *userData, const char *
 			return PHYSFS_ENUM_OK;
 		}
 	}
-
 	else if (rott_mode)
 	{
 		if (stricmp(fname, "rott") == 0)
@@ -1985,9 +2018,9 @@ static PHYSFS_EnumerateCallbackResult LumpNamespace(void *userData, const char *
 
 	I_Debugf("    adding lump %s\n", fname);
 	numlumps++;
-	Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+	lumpinfo.resize(numlumps);
 	AddLumpEx(user_data->dfile, numlumps - 1, 0, length,
-		user_data->dfindex, user_data->index, fname, 1, path);
+		user_data->dfindex, user_data->index, user_data->is_named ? fname : "INTRNLMP", 1, path);
 #endif
 	return PHYSFS_ENUM_OK;
 }
@@ -2021,7 +2054,8 @@ static PHYSFS_EnumerateCallbackResult WadNamespace(void *userData, const char *o
 
 	PHYSFS_readBytes(file, &header, sizeof(raw_wad_header_t));
 
-	if (strncmp(header.identification, "IWAD", 4) != 0)
+	
+	if ((strncmp(header.identification, "IWAD", 4) != 0) && (!wolf3d_mode))
 	{
 		// Homebrew levels?
 		if (strncmp(header.identification, "PWAD", 4) != 0)
@@ -2060,7 +2094,7 @@ static PHYSFS_EnumerateCallbackResult WadNamespace(void *userData, const char *o
 		}
 		I_Debugf("    adding wad lump %s\n", tname);
 		numlumps++;
-		Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+		lumpinfo.resize(numlumps);
 		AddLumpEx(user_data->dfile, numlumps - 1, pos, size,
 			user_data->dfindex, user_data->index, tname, 0, path);
 
@@ -2108,7 +2142,7 @@ static PHYSFS_EnumerateCallbackResult ScriptNamespace(void *userData, const char
 		// check for supported namespace directory
 		if (wolf3d_mode)
 		{
-			if ((stricmp(fname, "wolf3d") == 0) || (stricmp(fname, "wolf3d") == 0))
+			if ((stricmp(fname, "wolf3d") == 0) || (stricmp(fname, "wolf3d_ddf") == 0))
 			{
 				// recurse wolf3d subdirectory to TopLevel
 				PHYSFS_enumerate(path, TopLevel, userData);
@@ -2128,6 +2162,14 @@ static PHYSFS_EnumerateCallbackResult ScriptNamespace(void *userData, const char
 			if ((stricmp(fname, "heretic") == 0) || (stricmp(fname, "heretic_ddf") == 0))
 			{
 				// recurse heretic subdirectory to TopLevel
+				PHYSFS_enumerate(path, TopLevel, userData);
+			}
+		}
+		else if (game_mode_hacx)
+		{
+			if ((stricmp(fname, "hacx") == 0) || (stricmp(fname, "hacx_ddf") == 0))
+			{
+				// recurse HACX subdirectory to TopLevel
 				PHYSFS_enumerate(path, TopLevel, userData);
 			}
 		}
@@ -2156,7 +2198,7 @@ static PHYSFS_EnumerateCallbackResult ScriptNamespace(void *userData, const char
 
 		I_Printf("  adding global lump %s\n", fname);
 		numlumps++;
-		Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+		lumpinfo.resize(numlumps);
 		AddLumpEx(user_data->dfile, numlumps - 1, 0, length,
 			user_data->dfindex, user_data->index, fname, 1, path);
 	}
@@ -2174,6 +2216,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 	strcat(path, "/");
 	strcat(path, fname);
 
+
 	I_Printf("TopLevel: processing %s\n", path);
 
 	if (Check_isDirectory(path))
@@ -2186,7 +2229,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake C_START lump
 			I_Printf("  adding fake lump C_START\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "C_START", 0);
 
 			// enumerate all entries in the colormaps directory
@@ -2195,7 +2238,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake C_END lump
 			I_Printf("  adding fake lump C_END\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "C_END", 0);
 		}
 		else if (stricmp(fname, "flats") == 0)
@@ -2203,7 +2246,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake F_START lump
 			I_Printf("  adding fake lump F_START\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "F_START", 0);
 
 			// enumerate all entries in the flats directory
@@ -2212,7 +2255,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake F_END lump
 			I_Printf("  adding fake lump F_END\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "F_END", 0);
 		}
 		else if (stricmp(fname, "hires") == 0)
@@ -2220,7 +2263,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake HI_START lump
 			I_Printf("  adding fake lump HI_START\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "HI_START", 0);
 
 			// enumerate all entries in the hires directory
@@ -2229,7 +2272,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake HI_END lump
 			I_Printf("  adding fake lump HI_END\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "HI_END", 0);
 		}
 		else if (stricmp(fname, "patches") == 0)
@@ -2237,7 +2280,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake P_START lump
 			I_Printf("  adding fake lump P_START\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "P_START", 0);
 
 			// enumerate all entries in the flats directory
@@ -2246,7 +2289,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake P_END lump
 			I_Printf("  adding fake lump P_END\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "P_END", 0);
 		}
 		else if (stricmp(fname, "sprites") == 0)
@@ -2254,7 +2297,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake S_START lump
 			I_Printf("  adding fake lump S_START\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "S_START", 0);
 
 			// enumerate all entries in the sprites directory
@@ -2263,7 +2306,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake S_END lump
 			I_Printf("  adding fake lump S_END\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "S_END", 0);
 		}
 		else if (stricmp(fname, "textures") == 0)
@@ -2271,7 +2314,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake TX_START lump
 			I_Printf("  adding fake lump TX_START\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "TX_START", 0);
 
 			// enumerate all entries in the textures directory
@@ -2280,7 +2323,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake TX_END lump
 			I_Printf("  adding fake lump TX_END\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "TX_END", 0);
 		}
 		else if (stricmp(fname, "voices") == 0)
@@ -2288,7 +2331,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake V_START lump
 			I_Printf("  adding fake lump V_START\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "V_START", 0);
 
 			// enumerate all entries in the voices directory
@@ -2297,7 +2340,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake V_END lump
 			I_Printf("  adding fake lump V_END\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "V_END", 0);
 		}
 		else if (stricmp(fname, "voxels") == 0)
@@ -2305,7 +2348,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake VX_START lump
 			I_Printf("  adding fake lump VX_START\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "VX_START", 0);
 
 			// enumerate all entries in the voxels directory
@@ -2314,7 +2357,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// add fake VX_END lump
 			I_Printf("  adding fake lump VX_END\n");
 			numlumps++;
-			Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+			lumpinfo.resize(numlumps);
 			AddLump(NULL, numlumps - 1, 0, 0, user_data->dfindex, user_data->index, "VX_END", 0);
 		}
 		//Startup IWAD?
@@ -2331,6 +2374,9 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// enumerate all entries in the graphics directory
 			PHYSFS_enumerate(path, LumpNamespace, userData);
 		}
+
+
+		//const char* game_extras[] = { "base", "extras", NULL };
 		else if (stricmp(fname, "maps") == 0)
 		{
 			// enumerate all entries in the maps directory
@@ -2351,6 +2397,11 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			// enumerate all entries in the skins directory
 			PHYSFS_enumerate(path, LumpNamespace, userData);
 		}
+		else if (stricmp(fname, "soundfonts") == 0)
+		{
+		// enumerate all entries in the soundfonts directory
+		PHYSFS_enumerate(path, LumpNamespace, userData);
+		}
 		else if (stricmp(fname, "sounds") == 0)
 		{
 			// enumerate all entries in the sounds directory
@@ -2364,7 +2415,9 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 		else if (stricmp(fname, "shaders") == 0)
 		{
 			// enumerate scripts subdirectory
+			user_data->is_named = false;
 			PHYSFS_enumerate(path, LumpNamespace, userData);
+			user_data->is_named = true;
 		}
 		else if ((stricmp(fname, "video") == 0) || (stricmp(fname, "cinematics") == 0))
 		{
@@ -2380,18 +2433,20 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 			}
 		}
 		else if (rott_mode)
+        {
 			// Checks for Global ROTT palette (PLAYPAL) instead of palette-byte translation (from SLADE.pk3)
 			if (stricmp(fname, "rott") == 0)
-			{
 				{
 					//		// enumerate all entries in placebo ROTT Directory (inside EDGE.pak)
 					PHYSFS_enumerate(path, LumpNamespace, userData);
 				}
-			}
+        }
 		else if (strncasecmp(fname, "root", 4) == 0)
 		{
+            {
 			// recurse root subdirectory to TopLevel
 			PHYSFS_enumerate(path, TopLevel, userData);
+            }
 		}
 
 		return PHYSFS_ENUM_OK;
@@ -2452,7 +2507,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 
 		I_Printf("  adding global lump %s\n", fname);
 		numlumps++;
-		Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+		lumpinfo.resize(numlumps);
 		AddLumpEx(user_data->dfile, numlumps - 1, 0, length,
 			user_data->dfindex, user_data->index, fname, 1, path);
 	}
@@ -2460,7 +2515,7 @@ static PHYSFS_EnumerateCallbackResult TopLevel(void *userData, const char *origD
 	return PHYSFS_ENUM_OK;
 }
 
-extern void MapsReadHeaders(); //<--- This makes wlf_maps able to start the header identification
+extern bool MapsReadHeaders(); //<--- This makes wlf_maps able to start the header identification
 
 
 
@@ -2578,7 +2633,7 @@ static void AddFile(const char *filename, int kind, int dyn_index)
 				{
 					I_Printf("Building GL Nodes for: %s\n", filename);
 
-					if (!GB_BuildNodes(pakdir, gwa_filename.c_str()))
+					if (!AJ_BuildNodes(pakdir, gwa_filename.c_str()))
 						I_Error("Failed to build GL nodes for: %s\n", filename);
 				}
 				else
@@ -2756,13 +2811,11 @@ static void AddFile(const char *filename, int kind, int dyn_index)
 		}
 	}
 #endif // 0
-
 	if (kind <= FLKIND_HWad)
 	{
 		// WAD file
 		// TODO: handle Read failure
 		file->Read(&header, sizeof(raw_wad_header_t));
-
 		if (strncmp(header.identification, "IWAD", 4) != 0)
 		{
 			// Homebrew levels?
@@ -2780,6 +2833,7 @@ static void AddFile(const char *filename, int kind, int dyn_index)
 		raw_wad_entry_t *fileinfo = new raw_wad_entry_t[header.num_entries];
 
 		file->Seek(header.dir_start, epi::file_c::SEEKPOINT_START);
+
 		// TODO: handle Read failure
 		file->Read(fileinfo, length);
 
@@ -2788,7 +2842,7 @@ static void AddFile(const char *filename, int kind, int dyn_index)
 
 		// Fill in lumpinfo
 		numlumps += header.num_entries;
-		Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+		lumpinfo.resize(numlumps);
 
 		for (j = startlump, curinfo = fileinfo; j < numlumps; j++, curinfo++)
 		{
@@ -2820,22 +2874,23 @@ static void AddFile(const char *filename, int kind, int dyn_index)
 			if (base.size() > 8)
 				I_Error("Filename base of %s >8 chars", filename);
 
-			strcpy(lump_name, base.c_str());
-			strupr(lump_name);    // Required to be uppercase
-		}
+            strcpy(lump_name, base.c_str());
+			for (size_t i=0;i<strlen(lump_name);i++) {
+				lump_name[i] = toupper(lump_name[i]);
+			}
+        }
 
 		// calculate MD5 hash over whole file
 		ComputeFileMD5hash(df->dir_hash, file);
 
 		// Fill in lumpinfo
 		numlumps++;
-		Z_Resize(lumpinfo, lumpinfo_t, numlumps);
+		lumpinfo.resize(numlumps);
 
 		AddLump(df, startlump, 0,
 			file->GetLength(), datafile, datafile,
 			lump_name, true);
 	}
-
 	I_Debugf("   md5hash = %02x%02x%02x%02x...%02x%02x%02x%02x\n",
 		df->dir_hash.hash[0], df->dir_hash.hash[1],
 		df->dir_hash.hash[2], df->dir_hash.hash[3],
@@ -2893,7 +2948,7 @@ static void AddFile(const char *filename, int kind, int dyn_index)
 			{
 				I_Printf("Building GL Nodes for: %s\n", filename);
 
-				if (!GB_BuildNodes(filename, gwa_filename.c_str()))
+				if (!AJ_BuildNodes(filename, gwa_filename.c_str()))
 					I_Error("Failed to build GL nodes for: %s\n", filename);
 			}
 
@@ -2957,8 +3012,13 @@ void W_AddRawFilename(const char *file, int kind)
 	I_Debugf("Added filename: %s\n", file);
 
 	wadfiles.push_back(new raw_filename_c(file, kind));
-	r_pak_fp.push_back(new raw_filename_c(file, kind));
-	raw_wl6.push_back(new raw_filename_c(file, kind));
+}
+
+void WLF_AddRawFilename(const char* file, int kind)
+{
+	I_Debugf("Added filename: %s\n", file);
+
+	wl6files.push_back(new raw_filename_c(file, kind));
 }
 
 //
@@ -2974,12 +3034,11 @@ void W_AddRawFilename(const char *file, int kind)
 void W_InitMultipleFiles(void)
 {
 	InitCaches();
-
 	// open all the files, load headers, and count lumps
 	numlumps = 0;
 
 	// will be realloced as lumps are added
-	lumpinfo = NULL;
+	lumpinfo.clear();
 
 	std::list<raw_filename_c *>::iterator it;
 
@@ -2989,14 +3048,8 @@ void W_InitMultipleFiles(void)
 		AddFile(rf->filename.c_str(), rf->kind, -1);
 	}
 
-	for (it = raw_wl6.begin(); it != raw_wl6.end(); it++)
-	{
-		raw_filename_c *rf = *it;
-		AddFile(rf->filename.c_str(), rf->kind, -1);
-	}
-
 	if (numlumps == 0)
-		I_Error("W_InitMultipleFiles: no files found!\n");
+		I_Warning("W_InitMultipleFiles: no files found!\n");
 }
 
 static bool TryLoadExtraLanguage(const char *name)
@@ -3180,7 +3233,7 @@ epi::file_c *W_OpenLump(int lump)
 {
 	SYS_ASSERT(0 <= lump && lump < numlumps);
 
-	lumpinfo_t *l = lumpinfo + lump;
+	lumpinfo_t* l = &lumpinfo[lump];
 
 	data_file_c *df = data_files[l->file];
 
@@ -3221,7 +3274,7 @@ const char *W_GetFileName(int lump)
 {
 	SYS_ASSERT(0 <= lump && lump < numlumps);
 
-	lumpinfo_t *l = lumpinfo + lump;
+	lumpinfo_t* l = &lumpinfo[lump];
 
 	data_file_c *df = data_files[l->file];
 
@@ -3313,8 +3366,7 @@ int W_CheckNumForName2(const char *name)
 	{
 		if (i > 8)
 		{
-			I_Warning("Attempting to load: Name '%s', must use a ZIP to do this!\n", name);
-			I_Error("W_CheckNumForName: Name '%s' longer than 8 chars!\n", name);
+			I_Warning("W_CheckNumForName: Name '%s' longer than 8 chars!\n", name);
 			return -1;
 		}
 		buf[i] = toupper(name[i]);
@@ -3375,10 +3427,10 @@ int W_CheckNumForName_GFX(const char *name)
 	{
 		if (lumpinfo[i].kind == LMKIND_Normal ||
 			lumpinfo[i].kind == LMKIND_Sprite ||
-			lumpinfo[i].kind == LMKIND_Patch  ||
-			lumpinfo[i].kind == LMKIND_LBM ||
-			lumpinfo[i].kind == LMKIND_PIC ||
-			lumpinfo[i].kind == LMKIND_RAWFLATS)
+			lumpinfo[i].kind == LMKIND_Patch )// ||
+			//lumpinfo[i].kind == LMKIND_LBM ||
+			//lumpinfo[i].kind == LMKIND_PIC ||
+			//lumpinfo[i].kind == LMKIND_RAWFLATS)
 		{
 			if (strncmp(lumpinfo[i].name, buf, 8) == 0)
 				return i;
@@ -3408,7 +3460,7 @@ int W_GetNumForName2(const char *name)
 // W_FindLumpFromPath
 //
 // Ignore 8 character limit and retrieve lump from path to use that instead.
-// 
+//
 //
 //==========================================================================
 
@@ -3431,7 +3483,7 @@ int W_FindLumpFromPath(const std::string &path)
 //==========================================================================
 int W_FindNameFromPath(const char *name)
 {
-	std::string fn; //TODO: V808 https://www.viva64.com/en/w/v808/ 'fn' object of 'basic_string' type was created but was not utilized.
+	//std::string fn; //TODO: V808 https://www.viva64.com/en/w/v808/ 'fn' object of 'basic_string' type was created but was not utilized.
 
 	for (int i = 0; i < numlumps; i++)
 	{
@@ -3508,7 +3560,7 @@ int W_CheckNumForTexPatch(const char *name)
 
 	for (; i < numlumps && LUMP_MAP_CMP(i) == 0; i++)
 	{
-		lumpinfo_t *L = lumpinfo + lumpmap[i];
+		lumpinfo_t *L = &lumpinfo[lumpmap[i]];
 
 		if (L->kind == LMKIND_Patch || L->kind == LMKIND_Sprite || L->kind == LMKIND_PIC || // L->kind == LMKIND_ROTTPatch || L->kind == LMKIND_ROTTPic ||
 			L->kind == LMKIND_Normal)
@@ -3639,7 +3691,7 @@ static void W_ReadLump(int lump, void *dest)
 	if (lump >= numlumps)
 		I_Error("W_ReadLump: %i >= numlumps", lump);
 
-	lumpinfo_t *L = lumpinfo + lump;
+	lumpinfo_t *L = &lumpinfo[lump];
 #if (DEBUG_LUMPS)
 	I_Debugf("W_ReadLump: %d (%s)\n", lump, L->name);
 #endif
@@ -3913,7 +3965,7 @@ void W_ProcessTX_HI(void)
 
 static const char *FileKind_Strings[] =
 {
-	"iwad", "pwad", "EDGE", "gwa", "hwa",
+	"iwad", "pwad", "edge", "gwa", "hwa",
 	"lump", "ddf",  "demo", "rts", "deh",
 	"pak",  "wl6",  "rtl",  "fp", "vp", "pk3",
 	"epk", "pk7"
@@ -3968,6 +4020,90 @@ void W_ShowFiles(void)
 
 		I_Printf(" %2d %-4s \"%s\"\n", i + 1, FileKind_Strings[df->kind], df->file_name);
 	}
+}
+
+// TODO ~CA: Namespace it 
+// Lobo
+int W_LoboFindSkyImage(int for_file, const char* match)
+{
+	int total = 0;
+
+	for (int i = 0; i < numlumps; i++)
+	{
+		lumpinfo_t* L = &lumpinfo[i];
+
+		if (for_file >= 1 && L->file != for_file - 1)
+			continue;
+
+		if (match && *match)
+			if (!strstr(L->name, match))
+				continue;
+
+		switch (L->kind)
+		{
+		case LMKIND_Patch:
+			/*I_Printf(" %4d %-9s %2d %-6s %7d @ 0x%08x\n",
+			 i+1, L->name,
+			 L->file+1, LumpKind_Strings[L->kind],
+			 L->size, L->position); */
+			total++;
+			break;
+		case LMKIND_Normal:
+			/*I_Printf(" %4d %-9s %2d %-6s %7d @ 0x%08x\n",
+			 i+1, L->name,
+			 L->file+1, LumpKind_Strings[L->kind],
+			 L->size, L->position); */
+			total++;
+			break;
+		default: //Optional
+			continue;
+		}
+	}
+
+	I_Debugf("FindSkyPatch: file %i,  match %s, count: %i\n", for_file, match, total);
+
+	//I_Printf("Total: %d\n", total);
+	return total;
+}
+
+// Lobo
+bool W_LoboDisableSkybox(const char* ActualSky)
+{
+	bool TurnOffSkyBox = true;
+
+	//Run through all our loaded files
+	for (int m = 0; m < (int)data_files.size(); m++)
+	{
+		data_file_c* df = data_files[m];
+
+		//we only want pwads
+		if (FileKind_Strings[df->kind] == FileKind_Strings[FLKIND_PWad ||FLKIND_EPK ||FLKIND_PK3 ||FLKIND_PK7])
+		{
+			//I_Printf("Checking skies in %s\n",df->file_name);
+			//I_Printf(" %2d %-4s \"%s\"\n", m+1, FileKind_Strings[df->kind], df->file_name);
+
+			//first check if it has a sky box: this overrides normal skies
+			int totalskies = W_LoboFindSkyImage(m + 1, ActualSky);
+			if (totalskies != 0)
+			{	//we have a skybox
+				I_Debugf("%s has a skybox\n", df->file_name);
+				TurnOffSkyBox = false;
+			}
+			else
+			{
+				//3. does it have a patch with "SKY" in the name?
+				totalskies = W_LoboFindSkyImage(m + 1, "SKY");
+				if (totalskies != 0)
+				{	//assume it is a replacement sky
+					I_Debugf("%s has %i sky patches\n", df->file_name, totalskies);
+					TurnOffSkyBox = true;
+				}
+			}
+		}
+	}
+	//no sky patches detected
+	return TurnOffSkyBox;
+
 }
 
 //--- editor settings ---

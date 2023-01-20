@@ -2,7 +2,7 @@
 //  EDGE OGG Music Player
 //----------------------------------------------------------------------------
 // 
-//  Copyright (c) 2004-2009  The EDGE Team.
+//  Copyright (c) 2004-2021  The EDGE Team.
 // 
 //  This program is free software; you can redistribute it and/or
 //  modify it under the terms of the GNU General Public License
@@ -38,6 +38,11 @@
 #include "w_wad.h"
 
 #define OGGV_NUM_SAMPLES  8192
+
+#define OV_EXCLUDE_STATIC_CALLBACKS
+#define OGG_IMPL
+#define VORBIS_IMPL
+#include "minivorbis.h"
 
 extern bool dev_stereo;  // FIXME: encapsulation
 
@@ -197,8 +202,7 @@ long oggplayer_ftell(void *datasource)
 //----------------------------------------------------------------------------
 
 
-oggplayer_c::oggplayer_c() : status(NOT_LOADED), vorbis_inf(NULL) 
-//TODO: V730 https://www.viva64.com/en/w/v730/ Not all members of a class are initialized inside the constructor. Consider inspecting: looping, ogg_stream, is_stereo.
+oggplayer_c::oggplayer_c() : status(NOT_LOADED), vorbis_inf(NULL)
 {
 	ogg_file = NULL;
 
@@ -247,11 +251,11 @@ void oggplayer_c::PostOpenInit()
     vorbis_inf = ov_info(&ogg_stream, -1);
 	SYS_ASSERT(vorbis_inf);
 
-    if (vorbis_inf->channels == 1)
+    if (vorbis_inf->channels == 1) {
         is_stereo = false;
-    else
+	} else {
         is_stereo = true;
-    
+	}    
 	// Loaded, but not playing
 	status = STOPPED;
 }

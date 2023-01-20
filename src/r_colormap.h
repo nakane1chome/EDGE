@@ -45,7 +45,7 @@ void V_IndexColourToRGB(int indexcol, byte *returncol);
 rgbcol_t V_LookupColour(int col);
 
 // -AJA- 1999/07/03: moved here from v_res.h.
-extern int var_gamma;
+extern int r_gamma;
 
 #define GAMMA_CONV(light)  (light)
 
@@ -62,7 +62,7 @@ void V_SetPalette(int type, float amount);
 void VL_NormalizePalette(byte * palette);
 void V_ColourNewFrame(void);
 void R_PaletteStuff(void);
-void R_ColorMapUpdate(int col, float desat);
+void R_ColorMapUpdate(abstract_shader_c *shader, int col, float desat);
 
 
 #define PAL_RED(pix)  ((float)(playpal_data[0][pix][0]) / 255.0f)

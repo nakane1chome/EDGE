@@ -31,7 +31,7 @@
 // -MH- 1998/08/19 added up/down movement variables
 //
 
-#include <system/i_defs.h>
+#include "system/i_defs.h"
 
 #include "e_main.h"
 #include <sys/stat.h>
@@ -51,7 +51,6 @@
 #include "dm_defs.h"
 #include "dm_state.h"
 #include "games/wolf3d/wlf_local.h"
-//#include "games/rott/rott_local.h"
 #include "dstrings.h"
 #include "e_demo.h"
 #include "e_input.h"
@@ -60,7 +59,7 @@
 #include "g_game.h"
 #include "hu_draw.h"
 #include "hu_stuff.h"
-#include "l_glbsp.h"
+#include "l_ajbsp.h"
 #include "m_argv.h"
 #include "m_bbox.h"
 #include "m_cheatcodes.h"
@@ -90,8 +89,19 @@
 #include "vm_coal.h"
 #include "z_zone.h"
 
+#ifndef USE_FFMPEG
 #include "system/i_cinematic.h"
+#else
+#include "system/i_ffmpeg.h"
+#endif
 #include "system/i_x86.h"
+
+#include "../epi/pfd.h"
+#if _WIN32
+#define DEFAULT_PATH "C:\\"
+#else
+#define DEFAULT_PATH "/tmp"
+#endif
 
 //CA: 6/11/2018
 //    Removed E_TITLE from e_main.cc and into version.h!
@@ -109,7 +119,15 @@ bool wolf3d_mode = false; //Wolfenstein 3D game detection . . . kind of a 'hack'
 
 bool rott_mode = false; //hack!
 
+bool no_intro = false;
+
 bool heretic_mode = false; //hack!
+
+bool game_mode_doom = false;
+bool game_mode_doom2 = false;
+bool game_mode_hacx = false;
+bool game_mode_plutonia = false;
+bool game_mode_tnt = false;
 
 bool show_splash = true;
 
@@ -128,7 +146,8 @@ FILE *debugfile = NULL;
 FILE *openglfile = NULL;
 FILE *shadercompilefile = NULL;
 
-cvar_c i_skipsplash;
+DEF_CVAR(i_playsplash, int, "c", 0);
+
 
 gameflags_t default_gameflags =
 {
@@ -179,7 +198,9 @@ std::string cfgfile;
 std::string ewadfile;
 std::string epakfile; //<---- EDGE PAK FILE
 std::string rottepak; //<---- ROTT PAK FILE
-std::string iwad_base;
+
+DEF_CVAR(iwad_base, std::string, "c", "")	// CVAR for IWAD FILE std::string iwad_base;
+DEF_CVAR(iwad_dir, std::string, "c", "")
 std::string wolf_base; //<--- Wolfenstein file?
 
 std::string cache_dir;
@@ -191,15 +212,19 @@ std::string shot_dir;
 
 static std::string dragged_demo;
 
-extern cvar_c m_language;
-extern cvar_c g_aggression;
+extern std::string m_language;
+extern int g_aggression;
 
-cvar_c debug_testlerp;
-cvar_c ddf_strict;
-cvar_c ddf_lax;
-cvar_c ddf_quiet;
+DEF_CVAR(i_playintro, int, "c", 0);
+DEF_CVAR(g_showtitle, int, "c", 1);
 
-cvar_c r_gpuswitch;
+DEF_CVAR(debug_testlerp, int, "c", 0);
+DEF_CVAR(ddf_strict, int, "c", 0);
+DEF_CVAR(ddf_lax, int, "c", 0);
+DEF_CVAR(ddf_quiet, int, "c", 0);
+
+DEF_CVAR(r_gpuswitch, int, "c", 0);
+
 
 static void E_TitleDrawer(void);
 
@@ -309,20 +334,6 @@ static void SetGlobalVars(void)
 		SCREENHEIGHT = atoi(M_GetArgument(p + 2));
 	}
 
-	// Bits per pixel check....
-	s = M_GetParm("-bpp");
-	if (s)
-	{
-		SCREENBITS = atoi(s);
-
-		if (SCREENBITS <= 4) // backwards compat
-			SCREENBITS *= 8;
-	}
-
-	// restrict depth to allowable values
-	if (SCREENBITS < 15) SCREENBITS = 15;
-	else if (SCREENBITS > 32) SCREENBITS = 32;
-
 	M_CheckBooleanParm("windowed", &FULLSCREEN, true);
 	M_CheckBooleanParm("fullscreen", &FULLSCREEN, false);
 
@@ -371,8 +382,8 @@ static void SetGlobalVars(void)
 	if (M_CheckParm("-wolf3d_mode"))
 		wolf3d_mode = true;
 
-	//if (M_CheckParm("-rott_mode"))
-	//	rott_mode = true;
+	if (M_CheckParm("-rott_mode"))
+		rott_mode = true;
 
 	if (M_CheckParm("-infight"))
 		g_aggression = 1;
@@ -399,13 +410,13 @@ static void SetGlobalVars(void)
 	}
 
 	// check for strict and no-warning options
-	M_CheckBooleanCVar("strict", &ddf_strict, false);
-	M_CheckBooleanCVar("lax", &ddf_lax, false);
-	M_CheckBooleanCVar("warn", &ddf_quiet, true);
+	M_CheckBooleanIntParm("strict", &ddf_strict, false);
+	M_CheckBooleanIntParm("lax", &ddf_lax, false);
+	M_CheckBooleanIntParm("warn", &ddf_quiet, true);
 
-	strict_errors = ddf_strict.d ? true : false;
-	lax_errors = ddf_lax.d ? true : false;
-	no_warnings = ddf_quiet.d ? true : false;
+	strict_errors = ddf_strict ? true : false;
+	lax_errors = ddf_lax ? true : false;
+	no_warnings = ddf_quiet ? true : false;
 }
 
 //
@@ -420,10 +431,10 @@ void SetLanguage(void)
 	if (want_lang)
 		m_language = want_lang;
 
-	if (language.Select(m_language.str))
+	if (language.Select(m_language.c_str()))
 		return;
 
-	I_Warning("Invalid language: '%s'\n", m_language.str);
+	I_Warning("Invalid language: '%s'\n", m_language.c_str());
 
 	if (!language.IsValid())
 		if (!language.Select(0))
@@ -488,12 +499,12 @@ static void DoSystemStartup(void)
 
 	// [SP] Set up Optimus to use desired GPU by setting environment variable before init.
 #ifdef WIN32
-	if (r_gpuswitch.d == 1)
+	if (r_gpuswitch == 1)
 	{
 		I_Debugf("* Setting Optimus High-Performance GPU.\n");
 		_putenv("SHIM_MCCOMPAT=0x800000001");
 	}
-	else if (r_gpuswitch.d == 2)
+	else if (r_gpuswitch == 2)
 	{
 		I_Debugf("* Setting Optimus Power-Saving GPU.\n");
 		_putenv("SHIM_MCCOMPAT=0x800000000");
@@ -545,7 +556,7 @@ static void M_DisplayPause(void)
 
 	if (heretic_mode)
 	{
-		float x = 160 - 3 / 2; 
+		float x = 160 - 3 / 2;
 		//TODO: V636 https://www.viva64.com/en/w/v636/ The '3 / 2' expression was implicitly cast from 'int' type to 'float' type. Consider utilizing an explicit type cast to avoid the loss of a fractional part. An example: double A = (double)(X) / Y;.
 		float y = 3;
 		HUD_StretchImage(x, y, w, h, pause_image);
@@ -609,7 +620,7 @@ void E_Display(void)
 
 	//CA 9.27.17:
 	//Interpolator is now set in P_Tick (which should improve rendering hitches)
-	//N_SetInterpolater();
+	N_SetInterpolater();
 #if 0
 	//tapamn check interpolater value
 	I_Printf("I: %f\n", N_GetInterpolater());
@@ -704,7 +715,6 @@ void E_Display(void)
 #endif // 0
 	M_Drawer();  // menu is drawn even on top of everything (except console)
 
-
 	N_NetUpdate(false);  // send out any new accumulation
 
 	if (m_screenshot_required)
@@ -742,9 +752,13 @@ static const image_c *title_image = NULL;
 static void E_TitleDrawer(void)
 {
 	if (title_image)
-		HUD_StretchImage(0, 0, 320, 200, title_image);
+	{
+		HUD_DrawImageTitleWS(title_image); //Lobo: Widescreen titlescreen support
+	}	
 	else
-		HUD_SolidBox(0, 0, 320, 200, RGB_MAKE(64, 64, 64));
+	{
+		HUD_SolidBox(0, 0, 320, 200, RGB_MAKE(64,64,64));
+	}
 }
 
 
@@ -901,6 +915,11 @@ void InitDirectories(void)
 	std::string parms = epi::PATH_Join(game_dir.c_str(), "parms");
 	std::string base_ddf = epi::PATH_Join(game_dir.c_str(), "base");
 
+	if (base_ddf.empty())
+		I_Error("Error: /base root directory or contents missing, unable to find engine scripts!");
+	//else
+	//	I_Printf("BASE Directory; [%s]\n", base_ddf);
+
 	if (epi::FS_Access(parms.c_str(), epi::file_c::ACCESS_READ))
 	{
 		// Insert it right after the game parameter
@@ -911,12 +930,16 @@ void InitDirectories(void)
 	if (s)
 	{
 		ddf_dir = std::string(s);
-		//I_Printf("DDF Directory; [%s]\n", ddf_dir);
+		//I_Printf("BASE Directory; [%s]\n", ddf_dir);
 	}
 	else if (heretic_mode)
 	{
 		ddf_dir = epi::PATH_Join(base_ddf.c_str(), "heretic");
 		//I_Printf("DDF Directory; [%s]\n", ddf_dir);
+	}
+	else if (game_mode_hacx)
+	{
+		ddf_dir = epi::PATH_Join(base_ddf.c_str(), "hacx");
 	}
 	else if (rott_mode)
 	{
@@ -951,8 +974,8 @@ void InitDirectories(void)
 		ewadfile = M_ComposeFileName(home_dir.c_str(), s);
 	}
 	else
-	{
-		ewadfile = epi::PATH_Join(home_dir.c_str(), "EDGE.wad");
+    {
+        ewadfile = epi::PATH_Join(home_dir.c_str(), "edge.epk");
 	}
 
 	// EDGE.pak file
@@ -998,19 +1021,24 @@ void InitDirectories(void)
 // Kept freedoom.wad for backward compatibility
 // 2016/02/07: Added Darkwar.wad for ROTT
 // 9/2018: Added "strife1"
-const char *wadname[] = { "doom2", "doom","hyper", 
-						"plutonia", "tnt", "hacx", 
-						"heretic", "freedoom", "freedm", 
-						"chex", "freedoom1", "freedoom2", 
-						"darkwar", "slave", "doom1", 
+const char *wadname[] = { "doom2", "doom","hyper",
+						"plutonia", "tnt", "hacx",
+						"heretic", "freedoom", "freedm",
+						"chex", "freedoom1", "freedoom2",
+						"darkwar", "slave", "doom1",
 						"strife1", NULL };
+
+// Impement these for EGM (Edge Game Module) support!
+DEF_CVAR(iwad_file, std::string, "c", "")	// CVAR for IWAD FILE
+//DEF_CVAR(iwad_dir, std::string, "c", "")	// (iwad_dir, std::string, "c". "./" CVAR for camera-man system data files subdirectory.
 
 static void IdentifyVersion(void)
 {
-	I_Debugf("- Identify IWADS\n");
+	I_Printf("==============================================================================\n");
+	I_Printf("- IdentifyVersion()...\n");
 
-	// Check -wolf3d param (which is the ONLY way to start Wolfenstein for now), 
-	//TODO: if this is a Wolf3D map, drastically alter startupcode, and set a global bool to 'wolf3d_mode'? 
+	// Check -wolf3d param (which is the ONLY way to start Wolfenstein for now),
+	//TODO: if this is a Wolf3D map, drastically alter startupcode, and set a global bool to 'wolf3d_mode'?
 
 	if (wolf3d_mode)
 	{
@@ -1027,44 +1055,32 @@ static void IdentifyVersion(void)
 
 	// Check -iwad parameter, find out if it is the IWADs directory
 	std::string iwad_par;
-	std::string iwad_file;
+
+	//std::string iwad_file;
+
 	std::string iwad_dir;
 
+	//std::string fileName("./");
+	//FILE* file = NULL;
+
+
 	// Check -pak parameter, find out if it is PAKs. . .
-	std::string pak_par;
-	std::string pak_file;
-	std::string pak_dir;
+	//std::string pak_par;
+	//std::string pak_file;
+	//std::string pak_dir;
 
 
 	const char *s = M_GetParm("-iwad");
 
 	iwad_par = std::string(s ? s : "");
 
-#if 0
-	///This handles the startup for Heretic, which forces 3DGE to load her_ddf and the heretic fix PWAD, scheduled for removal.
-//if (s ? s : "heretic")
-	if (stricmp(wadname[iwad_file], "heretic") == 0)
-	{
-		heretic_mode = true;
-#if 0
-
-		I_Printf("Heretic IWAD: Joining PWAD fix!!!\n");
-		I_Debugf("Added filename: %s\n", REQHERETICPWAD "." EDGEWADEXT);
-		epi::PATH_Join(game_dir.c_str(), REQHERETICPWAD "." EDGEWADEXT);
-
-
-#endif // 0
-		I_Printf("DDF: Loading Heretic HDF\n");
-		ddf_dir = epi::PATH_Join(game_dir.c_str(), "her_ddf");
-		DDF_SetWhere(ddf_dir);
-	}
-	else
-	{
-		heretic_mode = false;
-		ddf_dir = epi::PATH_Join(game_dir.c_str(), "doom_ddf");
-		DDF_SetWhere(ddf_dir);
-	}
-#endif // 0
+	//iwad_par is iwad parameter
+	//iwad_file is the filename
+	//iwad_dir is the directoryname
+	//fileName = fileName.append(iwad_dir);
+	//fileName = fileName.append("/");
+	//fileName = fileName.append(s ? s : iwad_par.c_str());
+	//fileName = fileName.append(".wad");
 
 
 	if (!iwad_par.empty())
@@ -1130,6 +1146,7 @@ static void IdentifyVersion(void)
 		}
 		else
 		{
+
 			// next lines check for Heretic mode, and set it to true
 			if (fn.size() >= 11 && fn.compare(fn.size() - 11, 11, "heretic.wad") == 0)
 			{
@@ -1138,6 +1155,14 @@ static void IdentifyVersion(void)
 				DDF_SetWhere(ddf_dir);
 				heretic_mode = true;
 				printf("Heretic mode TRUE\n");
+			}
+			else if (fn.size() >= 8 && fn.compare(fn.size() - 8, 8, "hacx.wad") == 0)
+			{
+				I_Printf("DDF: Loading HACX DDF\n");
+				ddf_dir = epi::PATH_Join(game_dir.c_str(), "hacx_ddf");
+				DDF_SetWhere(ddf_dir);
+				game_mode_hacx = true;
+				printf("HACX mode TRUE\n");
 			}
 			else if (fn.size() >= 11 && fn.compare(fn.size() - 11, 11, "darkwar.wad") == 0)
 			{
@@ -1148,7 +1173,23 @@ static void IdentifyVersion(void)
 				printf("ROTT mode TRUE\n");
 				//CreateROTTpal();
 			}
-
+			// our new library will automatically generate a Wolfenstein "IWAD" created from wolf globals found in edge.epk when all data is found
+			else if (fn.size() >= 13 && fn.compare(fn.size() - 13, 13, "wlf_iwad.wad") == 0)
+			{
+				I_Printf("DDF: Wolfenstein Game Mode\n");
+				ddf_dir = epi::PATH_Join(game_dir.c_str(), "wolf_ddf");
+				DDF_SetWhere(ddf_dir);
+				wolf3d_mode = true;
+				printf("WLF_Mode TRUE\n");
+				//CreateROTTpal();
+			}
+			else
+			{
+				heretic_mode = false;
+				game_mode_hacx = false;
+				rott_mode = false;
+				wolf3d_mode = false;
+			}
 		}
 	}
 	else
@@ -1157,6 +1198,7 @@ static void IdentifyVersion(void)
 
 		int max = 1;
 
+		//I_Printf("IdentifyVersion: Current iwad_dir: current game_dir:  \n");
 		if (stricmp(iwad_dir.c_str(), game_dir.c_str()) != 0)
 		{
 			// IWAD directory & game directory differ
@@ -1192,17 +1234,24 @@ static void IdentifyVersion(void)
 					// next two lines check for Heretic mode, and set it to true
 					if (stricmp(wadname[w_idx], "heretic") == 0)
 					{
-						I_Printf("DDF: Loading Heretic HDF\n");
-						ddf_dir = epi::PATH_Join(game_dir.c_str(), "her_ddf");
-						DDF_SetWhere(ddf_dir);
+						I_Printf("w_idx: Heretic\n");
+						//ddf_dir = epi::PATH_Join(game_dir.c_str(), "her_ddf");
+						//DDF_SetWhere(ddf_dir);
 						heretic_mode = true;
 					}
 					else if (stricmp(wadname[w_idx], "darkwar") == 0)
 					{
-						I_Printf("GAME: Rise of the Triad: DARKWAR\n");
-						ddf_dir = epi::PATH_Join(game_dir.c_str(), "rott_ddf");
-						DDF_SetWhere(ddf_dir);
+						I_Printf("w_idx: DarkWar\n");
+						//ddf_dir = epi::PATH_Join(game_dir.c_str(), "rott_ddf");
+						//DDF_SetWhere(ddf_dir);
 						rott_mode = true;
+					}
+					else if (stricmp(wadname[w_idx], "wlf_iwad") == 0)
+					{
+						I_Printf("GAME: Wolfenstein 3D Registered\n");
+						//ddf_dir = epi::PATH_Join(game_dir.c_str(), "wolf_ddf");
+						//DDF_SetWhere(ddf_dir);
+						wolf3d_mode = true;
 					}
 					iwad_file = fn;
 					done = true;
@@ -1216,13 +1265,65 @@ static void IdentifyVersion(void)
 
 	if (iwad_file.empty())
 	{
-		I_Error("Cannot find a game IWAD (doom.wad, doom2.wad, heretic.wad, etc.).\n"
+
+		// Check that the EPI backend is available
+		if (!epi_pfd::settings::available())
+		{
+			I_Warning("Warning: EPI::PFD is not available on this platform!\n");
+		}
+
+		// Set verbosity to true
+		epi_pfd::settings::verbose(true);
+
+		// OS Notification, currently UNUSED
+		//epi_pfd::notify("EDGE IWAD Picker",
+		//	"This is ' a message, pay \" attention \\ to it!",
+		//	pfd::icon::info);
+
+		// Message box
+		auto m = epi_pfd::message("EDGE IWAD Picker",
+			"WARNING: IWAD Not Found, please specify the path to the desired IWADs (you can select more than one).",
+			epi_pfd::choice::ok_cancel,
+			epi_pfd::icon::warning);
+
+		// ~CA: Asynchronous: do something while waiting for user action
+		//for (int i = 0; i < 10 && !m.ready(1000); ++i)
+			//std::cout << "Waited 1 second for user input...\n";
+
+		// Determine based on user IWAD selection choice:
+		switch (m.result())
+		{
+		case epi_pfd::button::yes: I_Printf("IdentifyVersion: User selected YES for IWAD, calling dialogue\n"); break;
+		case epi_pfd::button::cancel: I_Error("ERROR: Cannot find a game IWAD!\n"); break;
+		default: break;
+		}
+
+		// epi_pfd Directory selection
+		auto dir = epi_pfd::select_folder("Select the directory", DEFAULT_PATH).result();
+		//I_Printf("Selected dir:  &dir \n");
+
+		// epi_pfd open_file
+		auto f = epi_pfd::open_file("Choose IWAD to open", DEFAULT_PATH,
+			{ "IWAD Files (.wad)", "*.wad *.pak",
+			  "All Files", "*" },
+			epi_pfd::opt::multiselect);
+		I_Printf("IdentifyVersion: Selected files:\n");
+		for (auto const& name : f.result())
+		{
+			std::string fn(epi::PATH_Join(dir.c_str(), name.c_str()));
+			iwad_file = fn;
+			I_Printf("PFD:Open_File: iwad_file returning true!\n");
+			break;
+		}
+		
+		/* I_Error("ERROR: Cannot find a game IWAD!\n"
 			"Did you install EDGE properly? You can do either of the following:\n"
 			"\n"
 			"1. Place one or more of these wads in the same directory as EDGE.\n"
 			"2. Edit your PATH settings to point to your desired IWAD\n"
 			"as per DOOMWADDIR and/or DOOMWADPATH.\n"
-			"3. Create a batch file or supply IWAD with the -iwad parameter.\n");
+			"3. Create a batch file or supply IWAD with the -iwad parameter.\n"
+			"4. Hardcode the IWAD string via EDGE.ini with the exact path.\n");*/
 	}
 
 		W_AddRawFilename(iwad_file.c_str(), FLKIND_IWad);
@@ -1253,6 +1354,42 @@ static void IdentifyVersion(void)
 }
 
 //WLF_EXTENSION ADDS ALL WL6 FILES ALL AT ONCE FOR WOLFENSTEIN, JUST FOR TESTING, MAYBE MAKE THIS MORE ROBUST IN THE FUTURE...?
+
+static void Add_Wolf(void)
+{
+
+	std::string loaded_game = iwad_base;
+
+	for (size_t i = 0; i < loaded_game.size(); i++)
+	{
+		loaded_game.at(i) = std::tolower(loaded_game.at(i));
+	}
+
+	const char* game_extras[] = { "base", "wolf3d", NULL };
+
+	for (size_t i = 0; game_extras[i]; i++)
+	{
+		if (game_extras[i])
+		{
+#ifdef __linux__
+			std::string optwad = "base/";
+#else
+			std::string optwad = "wolf3d\\";
+#endif
+			optwad.append(loaded_game.c_str()).append("_").append(game_extras[i]).append(".wl6");
+			optwad = epi::PATH_Join(game_dir.c_str(), optwad.c_str());
+
+			if (epi::FS_Access(optwad.c_str(), epi::file_c::ACCESS_READ))
+			{
+				WLF_AddRawFilename(optwad.c_str(), FLKIND_WL6);
+			}
+		}
+		else
+			I_Error("Wolfenstein: COULD NOT ADD WL6!\n");
+	}
+
+}
+
 const char *wlf_extension[] = { "audiohed", "audiot", "gamemaps","maphead", "vgadict", "vgagraph", "vgahead", "vswap", NULL }; //test to load this bitch up. . .
 static void IdentifyWolfenstein(void)
 {
@@ -1341,11 +1478,11 @@ static void IdentifyWolfenstein(void)
 			{
 				std::string fn(epi::PATH_Join(location2, wlf_extension[w_idx]));
 
-				fn += ("." WOLFDATEXT); //Wolfenstein Datas, maybe instead of +=, use an iterator, fn++?
+				fn += (WOLFREDUXPAK "." EDGEPAKEXT); //Wolfenstein Datas, maybe instead of +=, use an iterator, fn++?
 
 				if (epi::FS_Access(fn.c_str(), epi::file_c::ACCESS_READ))
 				{
-					if (stricmp(wlf_extension[w_idx], "MAPHEAD") == 0)
+					if (stricmp(wlf_extension[w_idx], "wolf") == 0)
 					{
 						wolf3d_mode = true;
 						I_Printf("DDF: Loading Wolfenstein, joining path\n");
@@ -1355,7 +1492,7 @@ static void IdentifyWolfenstein(void)
 
 					wolf_file = fn;
 					done = true;
-					I_Printf("MAPHEAD.WL6 found!/n");
+					//I_Printf("MAPHEAD.WL6 found!/n");
 					break;
 				}
 			}
@@ -1367,16 +1504,35 @@ static void IdentifyWolfenstein(void)
 		I_Printf("Wolfenstein -- brute force all WL6 files!\n");
 
 	if (wolf3d_mode)
-	I_Printf("BruteForce_DDF: Loading Wolfenstein DDF\n");
-	ddf_dir = epi::PATH_Join(game_dir.c_str(), "wolf_ddf");
-	DDF_SetWhere(ddf_dir);
+	I_Printf("wolf3d_mode still true\n");
+	//ddf_dir = epi::PATH_Join(game_dir.c_str(), "wolf_ddf");
+	//DDF_SetWhere(ddf_dir);
 
 
-	I_Printf("Wolfenstein: Joining Wolf3D Data!!!\n");
-	I_Debugf("Added filename: %s\n", WOLFMAPHEAD "." WOLFDATEXT);
-	epi::PATH_Join(game_dir.c_str(), WOLFMAPHEAD "." WOLFDATEXT);
-
-
+	I_Printf("Wolfenstein: Calling Add_Wolf function for WL6 data!\n");
+	Add_Wolf();
+	std::string reqwolfpak(epi::PATH_Join(game_dir.c_str(), WOLFREDUXPAK "." EDGEPAKEXT));
+	epi::PATH_Join(game_dir.c_str(), WOLFREDUXPAK "." EDGEPAKEXT);
+	I_Printf("Wolfenstein: Found Redux %s\n", reqwolfpak.c_str());
+	W_AddRawFilename(reqwolfpak.c_str(), FLKIND_PAK);
+	//std::string maphead_file = "MAPHEAD.WL6";
+	//I_Debugf("Added filename: %s\n", WOLFMAPHEAD "." WOLFDATEXT);
+	//WLF_AddRawFilename(maphead_file.c_str(), FLKIND_WL6);
+	//MapsReadHeaders();
+	//if (!PhysFS::exists("wolf.pak")) {
+		// Sigh, I don't know why it is, but VS2012 seems to set the base dir one lower than
+		//  it should be when debugging. Try to deal with this.
+	//	if (PhysFS_isDirectory("game") && PhysFS::exists("game/wolf.pak")) {
+	//		PhysFS::removeFromSearchPath(path);
+	//		path += "/game";
+	//		PhysFS::mount(path, "", false);
+	//	}
+	//	else {
+	//		throw PhysFS::Exception("wolf.pak is not in the base direcory! (" + path + ")");
+	//	}
+	//}
+	//PhysFS::mount(path + "/wolf.pak", "");
+	/*
 	I_Debugf("Added filename: %s\n", WOLFGAMEMAPS "." WOLFDATEXT);
 	epi::PATH_Join(game_dir.c_str(), WOLFGAMEMAPS "." WOLFDATEXT);
 
@@ -1398,7 +1554,7 @@ static void IdentifyWolfenstein(void)
 
 	I_Debugf("Added filename: %s\n", WOLFAUDIOT "." WOLFDATEXT);
 	epi::PATH_Join(game_dir.c_str(), WOLFAUDIOT "." WOLFDATEXT);
-
+	*/
 	CreatePlaypal();
 
 	wolf_base = epi::PATH_GetBasename(wolf_file.c_str());
@@ -1440,10 +1596,44 @@ static void IdentifyWolfenstein(void)
 
 	W_AddRawFilename(reqwad.c_str(), FLKIND_EPK);
 
-	I_Printf("Wolfenstein Data is loaded and joined with 3DGE -- let's keep going!\n");
+	//I_Printf("Wolfenstein Data is loaded and joined with 3DGE -- let's keep going!\n");
 
 	// After this, should we skip all the bullshit and load the stuff directly?
 }
+
+static void Add_Extras(void) 
+{
+
+	std::string loaded_game = iwad_base;
+
+	for (size_t i = 0; i < loaded_game.size(); i++) 
+	{
+		loaded_game.at(i) = std::tolower(loaded_game.at(i));
+	}
+
+	const char* game_extras[] = { "base", "extras", NULL };
+
+	for (size_t i = 0; game_extras[i]; i++) 
+	{
+		if (game_extras[i]) 
+		{
+#ifdef __linux__
+			std::string optwad = "edge_base/";
+#else
+			std::string optwad = "edge_base\\";
+#endif
+			optwad.append(loaded_game.c_str()).append("_").append(game_extras[i]).append(".wad");
+			optwad = epi::PATH_Join(game_dir.c_str(), optwad.c_str());
+
+			if (epi::FS_Access(optwad.c_str(), epi::file_c::ACCESS_READ)) 
+			{
+				W_AddRawFilename(optwad.c_str(), FLKIND_PWad);
+			}
+		}
+	}
+
+}
+
 
 
 static void CheckTurbo(void)
@@ -1487,7 +1677,7 @@ static void ShowDateAndVersion(void)
 	I_Printf("EDGE homepage is at http://EDGE.sourceforge.net/\n");
 	I_Printf("EDGE Wiki is at http://3dfxdev.net/edgewiki/\n");
 	I_Printf("EDGE forums are located at http://tdgmods.net/smf\n");
-	I_Printf("EDGE problems should be reported via https://github.com/3dfxdev/hyper3DGE/issues\n");
+	I_Printf("EDGE problems should be reported via https://github.com/3dfxdev/EDGE/issues\n");
 	I_Printf("EDGE is based on id Tech by id Software http://www.idsoftware.com/\n");
 
 
@@ -1663,7 +1853,7 @@ static void AddCommandLineFiles(void)
 
 			// sanity check...
 			if (stricmp(ext.c_str(), "wad") == 0 ||
-				stricmp(ext.c_str(), "wl6") == 0 ||
+				//stricmp(ext.c_str(), "wl6") == 0 ||
 				stricmp(ext.c_str(), "pak") == 0 ||
 				stricmp(ext.c_str(), "pk7") == 0 ||
 				stricmp(ext.c_str(), "pk3") == 0 ||
@@ -1700,7 +1890,7 @@ static void AddCommandLineFiles(void)
 
 			// sanity check...
 			if (stricmp(ext.c_str(), "wad") == 0 ||
-				stricmp(ext.c_str(), "wl6") == 0 ||
+				//stricmp(ext.c_str(), "wl6") == 0 ||
 				stricmp(ext.c_str(), "gwa") == 0 ||
 				stricmp(ext.c_str(), "hwa") == 0 ||
 				stricmp(ext.c_str(), "ddf") == 0 ||
@@ -1847,13 +2037,15 @@ static void E_Startup(void)
 	DoSystemStartup();
 
 	bool nosplash = false;
+	bool nointro = false;
 
 	//Splash Screen Check
-	M_CheckBooleanParm("nosplash", &nosplash, false);
-	if (!nosplash && i_skipsplash.d == 0)
-	{
+	//M_CheckBooleanParm("nosplash", &nosplash, false);
+	//if (!nosplash)
+	//{
 		//E_SplashScreen();
-	}
+	//}
+
 
 #if 0
 	pt = M_GetParm("-wolf3d");
@@ -1949,6 +2141,7 @@ static void E_InitialState(void)
 		bots = atoi(ps);
 
 	ps = M_GetParm("-warp");
+	
 	if (ps)
 	{
 		warp = true;
@@ -1977,7 +2170,7 @@ static void E_InitialState(void)
 		warp_deathmatch = 2;
 	}
 
-	if (M_CheckParm("-splitscreen") > 0)
+	if (M_CheckParm("-splitscreen"))
 		splitscreen_mode = true;
 
 	if (M_GetParm("-record"))
@@ -1986,10 +2179,34 @@ static void E_InitialState(void)
 	// start the appropriate game based on parms
 	if (!warp)
 	{
-		I_Debugf("- Startup: showing title screen.\n");
-		E_StartTitle();
+		if (i_playsplash == 1)
+		{
+			I_Debugf("- Startup: i_playsplash is 1, E_SplashScreen.\n");
+			E_SplashScreen();
+		}
+		if (i_playintro == 1)
+		{
+			I_Debugf("- Startup: i_playintro is 1, playback ROQ.\n");
+			//if (rott_mode)
+			//{
+			//	E_PlayMovie("/pack0/video/apogee.roq", 1);
+			//}
+			//else
+				// IF YOU BUILD WITH USE_FFMPEG, CHANGE ROQ TO DESIRED FORMAT AS KIT DOES NOT PLAY ROQ.
+			E_PlayMovie("/pack0/video/intro.roq", 1);
+		}
+		//if ((!warp) && (i_playintro == 0))
+		//{
+		//	I_Debugf("- Startup: showing title screen.\n");
+		//}
+		if (g_showtitle == 1)
+		{
+			E_StartTitle();
+		}
+
 		return;
 	}
+
 
 	newgame_params_c params;
 
@@ -2051,12 +2268,6 @@ void E_Main(int argc, const char **argv)
 	{
 		E_Startup();
 
-//		E_PlayMovie("/pack0/video/intro.roq", 1);
-		if (rott_mode)
-			E_PlayMovie("/pack0/video/apogee.roq", 1);
-		else
-			E_PlayMovie("/pack0/video/intro.roq", 1);
-
 		E_InitialState();
 
 		CON_MessageColor(RGB_MAKE(255, 255, 0));
@@ -2116,7 +2327,7 @@ void E_Tick(void)
 	static int ticker = 70;
 	ticker--;
 	if (ticker == 0) {
-		extern cvar_c r_lerp;
+		extern int r_lerp;
 
 		ticker = 70;
 		r_lerp.d = !r_lerp.d;
@@ -2131,9 +2342,9 @@ void E_Tick(void)
 	do {
 		interpstart += interpdiff;
 
-		extern cvar_c r_maxfps;
+		extern int r_maxfps;
 
-		if (r_maxfps.d > 0)
+		if (r_maxfps > 0)
 		{
 			while (I_GetMillies() < nextframe)
 			{
@@ -2141,7 +2352,7 @@ void E_Tick(void)
 				if ((nextframe - I_GetMillies()) > 1000)
 					break;
 			}
-			nextframe = I_GetMillies() + 1000.0f / r_maxfps.f;
+			nextframe = I_GetMillies() + 1000.0f / r_maxfps;
 		}
 
 		N_SetInterpolater();
@@ -2175,7 +2386,7 @@ void E_Tick(void)
 		S_SoundTicker();
 		S_MusicTicker(); // -ACB- 1999/11/13 Improved music update routines
 
-		N_NetUpdate(false);  // check for new console commands
+		N_NetUpdate(true);  // check for new console commands
 	}
 }
 

@@ -91,9 +91,9 @@ static inline float ExFloorLerpedTop(extrafloor_t *exf)
 // #define DEBUG_GREET_NEIGHBOUR
 
 
-cvar_c debug_hom;
-cvar_c r_oldblend;
-extern cvar_c r_stretchworld;
+DEF_CVAR(debug_hom, int, "c", 0);
+DEF_CVAR(r_oldblend, int, "c", 1);
+extern int r_stretchworld;
 
 side_t *sidedef;
 line_t *linedef;
@@ -103,12 +103,14 @@ sector_t *backsector;
 unsigned int root_node;
 
 
-int detail_level = 1;
+int detail_level = 2;
 int use_dlights = 0;
 
 int doom_fading = 1;
 
 int fade_color;
+int swirl_pass = 0;
+bool thick_liquid = false;
 
 float view_x_slope;
 float view_y_slope;
@@ -231,7 +233,7 @@ static void RGL_DrawGizmo(const gizmo_t *gizmo)
 }
 
 // Camera-man system implementation.
-cvar_c camera_subdir;	// CVAR for camera-man system data files subdirectory.
+DEF_CVAR(camera_subdir, std::string, "c", "doom_ddf/cameras")	// CVAR for camera-man system data files subdirectory.
 
 namespace cameraman
 {
@@ -393,7 +395,7 @@ namespace cameraman
 		std::string fileName("./");
 		FILE *file = NULL;
 
-		fileName = fileName.append(camera_subdir.str);
+		fileName = fileName.append(camera_subdir);
 		fileName = fileName.append("/");
 		fileName = fileName.append(map ? map : currmap->name.c_str());
 		fileName = fileName.append(".camdata");
@@ -404,7 +406,7 @@ namespace cameraman
 
 		if (reading > 0)
 		{
-			if (file = fopen(fileName.c_str(), "rb"))
+            if ((file = fopen(fileName.c_str(), "rb")))
 			{
 				fread((void *)&g_count, sizeof(int), 1, file);
 				fread((void *)body, sizeof(char), 5, file);
@@ -418,7 +420,7 @@ namespace cameraman
 		}
 		else // Only editing
 		{
-			if (file = fopen(fileName.c_str(), "wb"))
+            if ((file = fopen(fileName.c_str(), "wb")))
 			{
 				fwrite((void *)&g_count, sizeof(int), 1, file);
 				fwrite((void *)body, sizeof(char), 5, file);
@@ -1228,13 +1230,13 @@ static inline void Color_Black(local_gl_vert_t *v)
 	v->col[3] = 1.0;
 }
 
-static inline void Vertex_Std(local_gl_vert_t *v, const vec3_t *src, GLboolean EDGE)
+static inline void Vertex_Std(local_gl_vert_t *v, const vec3_t *src, GLboolean edge)
 {
 	v->x = src->x;
 	v->y = src->y;
 	v->z = src->z;
 
-	v->EDGE = EDGE;
+	v->edge = edge;
 }
 
 static inline void Normal_Std(local_gl_vert_t *v, float nx, float ny, float nz)
@@ -1318,6 +1320,73 @@ static inline void TexCoord_PlaneLight(local_gl_vert_t *v, int t)
 }
 #endif
 
+// Adapted from Quake 3 GPL release - Dasho (not used yet, but might be for future effects)
+void CalcScrollTexCoords( float x_scroll, float y_scroll, vec2_t *texc )
+{
+	int i;
+	float timeScale = leveltime / 100.0f;
+	float adjustedScrollS, adjustedScrollT;
+
+	adjustedScrollS = x_scroll * timeScale;
+	adjustedScrollT = y_scroll * timeScale;
+
+	// clamp so coordinates don't continuously get larger
+	adjustedScrollS = adjustedScrollS - floor( adjustedScrollS );
+	adjustedScrollT = adjustedScrollT - floor( adjustedScrollT );
+
+	texc->x += adjustedScrollS;
+	texc->y += adjustedScrollT;
+}
+
+// Adapted from Quake 3 GPL release - Dasho
+void CalcTurbulentTexCoords( vec2_t *texc, vec3_t *pos )
+{
+	float now;
+	float phase = 0;
+	float frequency = thick_liquid ? 0.5 : 1.0;
+	float amplitude = 0.05;
+
+	now = ( phase + leveltime / 100.0f * frequency );
+
+	if (swirling_flats == SWIRL_PARALLAX)
+	{
+		frequency *= 2;
+		if (thick_liquid)
+		{
+			if (swirl_pass == 1)
+			{
+				texc->x = texc->x + r_sintable[(int)(((pos->x + pos->z) * 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK)] * amplitude;
+				texc->y = texc->y + r_sintable[(int)((pos->y * 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK) ] * amplitude;
+			}
+			else
+			{
+				amplitude = 0;
+				texc->x = texc->x - r_sintable[(int)(((pos->x + pos->z)* 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK)] * amplitude;
+				texc->y = texc->y - r_sintable[(int)((pos->y * 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK)] * amplitude;
+			}
+		}
+		else
+		{
+			if (swirl_pass == 1)
+			{
+				amplitude = 0.025;
+				texc->x = texc->x + r_sintable[(int)(((pos->x + pos->z) * 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK)] * amplitude;
+				texc->y = texc->y + r_sintable[(int)((pos->y * 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK) ] * amplitude;
+			}
+			else
+			{
+				amplitude = 0.015;
+				texc->x = texc->x - r_sintable[(int)(((pos->x + pos->z)* 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK)] * amplitude;
+				texc->y = texc->y - r_sintable[(int)((pos->y * 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK)] * amplitude;
+			}
+		}
+	}
+	else
+	{
+		texc->x = texc->x + r_sintable[(int)(((pos->x + pos->z)* 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK)] * amplitude;
+		texc->y = texc->y + r_sintable[(int)((pos->y * 1.0/128 * 0.125 + now) * FUNCTABLE_SIZE) & (FUNCTABLE_MASK) ] * amplitude;
+	}
+}
 
 typedef struct
 {
@@ -1353,9 +1422,18 @@ static void WallCoordFunc(void *d, int v_idx,
 	*pos    = data->vert[v_idx];
 	*normal = data->normal;
 
-	rgb[0] = data->R;
-	rgb[1] = data->G;
-	rgb[2] = data->B;
+	if (swirl_pass > 1)
+	{
+		rgb[0] = 1.0 / data->R;
+		rgb[1] = 1.0 / data->G;
+		rgb[2] = 1.0 / data->B;
+	}
+	else
+	{
+		rgb[0] = data->R;
+		rgb[1] = data->G;
+		rgb[2] = data->B;		
+	}
 
 	float along;
 
@@ -1372,6 +1450,9 @@ static void WallCoordFunc(void *d, int v_idx,
 	texc->x = data->tx0 + along  * data->tx_mul;
 	texc->y = data->ty0 + pos->z * data->ty_mul;
 
+
+	if (swirl_pass > 0)
+		CalcTurbulentTexCoords(texc, pos);
 	*lit_pos = *pos;
 }
 
@@ -1412,9 +1493,18 @@ static void PlaneCoordFunc(void *d, int v_idx,
 	*pos    = data->vert[v_idx];
 	*normal = data->normal;
 
-	rgb[0] = data->R;
-	rgb[1] = data->G;
-	rgb[2] = data->B;
+	if (swirl_pass > 1)
+	{
+		rgb[0] = 1.0 / data->R;
+		rgb[1] = 1.0 / data->G;
+		rgb[2] = 1.0 / data->B;
+	}
+	else
+	{
+		rgb[0] = data->R;
+		rgb[1] = data->G;
+		rgb[2] = data->B;		
+	}
 
 	float rx = (data->tx0 + pos->x) / data->image_w;
 	float ry = (data->ty0 + pos->y) / data->image_h;
@@ -1422,6 +1512,8 @@ static void PlaneCoordFunc(void *d, int v_idx,
 	texc->x = rx * data->x_mat.x + ry * data->x_mat.y;
 	texc->y = rx * data->y_mat.x + ry * data->y_mat.y;
 
+	if (swirl_pass > 0)
+		CalcTurbulentTexCoords(texc, pos);
 	*lit_pos = *pos;
 }
 
@@ -1445,7 +1537,7 @@ static void DLIT_Wall(mobj_t *mo, void *dataptr)
 			return;
 	}
 
-	R_ColorMapUpdate(cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
+	R_ColorMapUpdate(NULL, cur_sub->sector->lightcolor, cur_sub->sector->desaturation); // FIXME: shouldn't this use colormaps properly too?
 
 	SYS_ASSERT(mo->dlight.shader);
 
@@ -1460,7 +1552,7 @@ static void GLOWLIT_Wall(mobj_t *mo, void *dataptr)
 {
 	wall_coord_data_t *data = (wall_coord_data_t *)dataptr;
 
-	R_ColorMapUpdate(cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
+	R_ColorMapUpdate(NULL, cur_sub->sector->lightcolor, cur_sub->sector->desaturation); // FIXME: shouldn't this use colormaps properly too?
 
 	SYS_ASSERT(mo->dlight.shader);
 
@@ -1490,7 +1582,7 @@ static void DLIT_Plane(mobj_t *mo, void *dataptr)
 
 	// NOTE: distance already checked in P_DynamicLightIterator
 
-	R_ColorMapUpdate(cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
+	R_ColorMapUpdate(NULL, cur_sub->sector->lightcolor, cur_sub->sector->desaturation); // FIXME: shouldn't this use colormaps properly too?
 
 	SYS_ASSERT(mo->dlight.shader);
 
@@ -1505,7 +1597,7 @@ static void GLOWLIT_Plane(mobj_t *mo, void *dataptr)
 {
 	plane_coord_data_t *data = (plane_coord_data_t *)dataptr;
 
-	R_ColorMapUpdate(cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
+	R_ColorMapUpdate(NULL, cur_sub->sector->lightcolor, cur_sub->sector->desaturation); // FIXME: shouldn't this use colormaps properly too?
 
 	SYS_ASSERT(mo->dlight.shader);
 
@@ -1742,11 +1834,14 @@ static void DrawWallPart(drawfloor_t *dfloor,
 	else
 		blending = BL_Less;
 
-	if (r_oldblend.d > 0)
+	if (r_oldblend > 0)
 	{
 		if (trans < 0.99f || image->opacity == OPAC_Complex)
 			blending |= BL_Alpha;
-		else if (trans < 0.99f || image->opacity != OPAC_Solid)
+	}
+	else
+	{
+		if (trans < 0.99f || image->opacity != OPAC_Solid)
 			blending |= BL_Alpha;
 	}
 
@@ -1780,15 +1875,36 @@ static void DrawWallPart(drawfloor_t *dfloor,
 	data.blending = blending;
 	data.trans = trans;
 	data.mid_masked = mid_masked;
+	
+if (surf->image->liquid_type == LIQ_Thick)
+		thick_liquid = true;
+	else
+		thick_liquid = false;
 
-	R_ColorMapUpdate(cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
+	if (surf->image->liquid_type > LIQ_None && swirling_flats > SWIRL_SMMU)
+		swirl_pass = 1;
 
 	abstract_shader_c *cmap_shader = R_GetColormapShader(props, lit_adjust);
+
+	R_ColorMapUpdate(cmap_shader, cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
 
 	cmap_shader->WorldMix(GL_POLYGON, data.v_count, data.tex_id,
 			trans, &data.pass, data.blending, data.mid_masked,
 			&data, WallCoordFunc);
 
+	if (surf->image->liquid_type > LIQ_None && swirling_flats == SWIRL_PARALLAX) // Kept as an example for future effects
+	{
+		data.tx0 = surf->offset.x + 25;
+		data.ty0 = surf->offset.y + 25;
+		swirl_pass = 2;
+		data.blending = BL_Masked | BL_Alpha;
+		data.trans = 0.33f;
+		trans = 0.33f;
+		cmap_shader->WorldMix(GL_POLYGON, data.v_count, data.tex_id,
+					trans, &data.pass, data.blending, false,
+					&data, WallCoordFunc);
+	}
+	
 	if (use_dlights && ren_extralight < 250)
 	{
 		float bottom = MIN(lz1, rz1);
@@ -1803,6 +1919,7 @@ static void DrawWallPart(drawfloor_t *dfloor,
 							 v_bbox[BOXRIGHT], v_bbox[BOXTOP],    top,
 							 GLOWLIT_Wall, &data);
 	}
+	swirl_pass = 0;
 }
 
 static void DrawSlidingDoor(drawfloor_t *dfloor, float c, float f,
@@ -2024,7 +2141,7 @@ static void ComputeWallTiles(seg_t *seg, drawfloor_t *dfloor, int sidenum, float
 
 	if (! other)
 	{
-		if (! sd->middle.image && ! debug_hom.d)
+		if (! sd->middle.image && ! debug_hom)
 			return;
 
 		if (sec->f_slope || sec->c_slope)
@@ -2063,7 +2180,7 @@ static void ComputeWallTiles(seg_t *seg, drawfloor_t *dfloor, int sidenum, float
 
 	if (slope_fh < otherfh)
 	{
-		if (! sd->bottom.image && ! debug_hom.d)
+		if (! sd->bottom.image && ! debug_hom)
 		{
 			lower_invis = true;
 		}
@@ -2091,7 +2208,7 @@ static void ComputeWallTiles(seg_t *seg, drawfloor_t *dfloor, int sidenum, float
 	if (slope_ch > otherch &&
 		! (IS_SKY(sec->ceil) && IS_SKY(other->ceil)))
 	{
-		if (! sd->top.image && ! debug_hom.d)
+		if (! sd->top.image && ! debug_hom)
 		{
 			upper_invis = true;
 		}
@@ -2212,7 +2329,7 @@ static void ComputeWallTiles(seg_t *seg, drawfloor_t *dfloor, int sidenum, float
 					flags |= WTILF_ExtraY;
 			}
 
-			if (! surf->image && ! debug_hom.d)
+			if (! surf->image && ! debug_hom)
 				continue;
 
 			tex_z = (C->ef_line->flags & MLF_LowerUnpegged) ?
@@ -2331,7 +2448,7 @@ static void DLIT_Flood(mobj_t *mo, void *dataptr)
 			data->vert[col*2 + 1].Set(x, y, z + data->dh / data->piece_row);
 		}
 
-		R_ColorMapUpdate(cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
+		R_ColorMapUpdate(NULL, cur_sub->sector->lightcolor, cur_sub->sector->desaturation); // FIXME: shouldn't this use colormaps properly too?
 
 		mo->dlight.shader->WorldMix(GL_QUAD_STRIP, data->v_count,
 				data->tex_id, 1.0, &data->pass, blending, false,
@@ -2473,7 +2590,7 @@ static void EmulateFloodPlane(const drawfloor_t *dfloor,
 		data.B = (64 + 90 * (row & 2))  / 255.0;
 #endif
 
-		R_ColorMapUpdate(cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
+		R_ColorMapUpdate(cmap_shader, cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
 
 		cmap_shader->WorldMix(GL_QUAD_STRIP, data.v_count,
 				data.tex_id, 1.0, &data.pass, BL_NONE, false,
@@ -2554,7 +2671,7 @@ static void RGL_DrawSeg(drawfloor_t *dfloor, seg_t *seg)
 
 
 	// -AJA- 2004/04/21: Emulate Flat-Flooding TRICK
-	if (! debug_hom.d && solid_mode && dfloor->is_lowest &&
+	if (! debug_hom && solid_mode && dfloor->is_lowest &&
 		sd->bottom.image == NULL && cur_seg->back_sub)
 	{
 		float frontf = SecLerpedFloor(cur_seg->front_sub->sector);
@@ -2570,7 +2687,7 @@ static void RGL_DrawSeg(drawfloor_t *dfloor, seg_t *seg)
 		}
 	}
 
-	if (! debug_hom.d && solid_mode && dfloor->is_highest &&
+	if (! debug_hom && solid_mode && dfloor->is_highest &&
 		sd->top.image == NULL && cur_seg->back_sub)
 	{
 		float frontc = SecLerpedCeil(cur_seg->front_sub->sector);
@@ -2637,12 +2754,17 @@ static void RGL_WalkMirror(drawsub_c *dsub, seg_t *seg,
 //
 static void RGL_WalkSeg(drawsub_c *dsub, seg_t *seg)
 {
+	// ignore segs sitting on current mirror
+	if (MIR_SegOnPortal(seg))
+		return;
+
 	float sx1 = seg->v1->x;
 	float sy1 = seg->v1->y;
 
 	float sx2 = seg->v2->x;
 	float sy2 = seg->v2->y;
 
+#ifdef EXPERIMENTAL_REJECT
 	// Reject lines not facing viewer
 	{
 		float pt1x = sx1 - viewx;
@@ -2656,6 +2778,7 @@ static void RGL_WalkSeg(drawsub_c *dsub, seg_t *seg)
 	// ignore segs sitting on current mirror
 	if (MIR_SegOnPortal(seg))
 		return;
+#endif
 
 	// when there are active mirror planes, segs not only need to
 	// be flipped across them but also clipped across them.
@@ -2764,7 +2887,11 @@ static void RGL_WalkSeg(drawsub_c *dsub, seg_t *seg)
 
 	dsub->visible = true;
 
+#ifdef ZDOOM_OCCLUSION
 	if (seg->miniseg || angle_L == angle_R)
+#else
+	if (seg->miniseg || span == 0)
+#endif
 		return;
 
 	if (num_active_mirrors < MAX_MIRRORS)
@@ -2804,14 +2931,14 @@ static void RGL_WalkSeg(drawsub_c *dsub, seg_t *seg)
 
 	// --- handle sky (using the depth buffer) ---
 
-	bool upper_sky = false;
+//	bool upper_sky = false;
 	bool lower_sky = false;
 
 	if (backsector && IS_SKY(frontsector->floor) && IS_SKY(backsector->floor))
 		lower_sky = true;
 
-	if (backsector && IS_SKY(frontsector->ceil) && IS_SKY(backsector->ceil))
-		upper_sky = true;
+//	if (backsector && IS_SKY(frontsector->ceil) && IS_SKY(backsector->ceil))
+//		upper_sky = true;
 
 	if (lower_sky && frontsector->f_h < backsector->f_h)
 	{
@@ -2837,7 +2964,7 @@ static void RGL_WalkSeg(drawsub_c *dsub, seg_t *seg)
 		}
 	}
 	// -AJA- 2004/08/29: Emulate Sky-Flooding TRICK
-	else if (! debug_hom.d && backsector && IS_SKY(backsector->ceil) &&
+	else if (! debug_hom && backsector && IS_SKY(backsector->ceil) &&
 			 seg->sidedef->top.image == NULL &&
 			 backsector->c_h < frontsector->c_h)
 	{
@@ -3220,13 +3347,15 @@ static void RGL_DrawPlane(drawfloor_t *dfloor, float h,
 	else
 		blending = BL_Less;
 
-	if (r_oldblend.d > 0)
+	if (r_oldblend > 0)
 	{
 		if (trans < 0.99f || surf->image->opacity == OPAC_Complex)
+		{
 			blending |= BL_Alpha;
-		else if (trans < 0.99f || surf->image->opacity != OPAC_Solid)
-			blending |= BL_Alpha;
+		}
 	}
+	else if (trans < 0.99f || surf->image->opacity != OPAC_Solid)
+			blending |= BL_Alpha;
 
 
 	plane_coord_data_t data;
@@ -3245,8 +3374,8 @@ static void RGL_DrawPlane(drawfloor_t *dfloor, float h,
 	data.y_mat = surf->y_mat;
 
 	float mir_scale = MIR_XYScale();
-	data.x_mat.x /= mir_scale; data.x_mat.y /= mir_scale / 2.0f;
-	data.y_mat.x /= mir_scale * 2.0f; data.y_mat.y /= mir_scale;
+	data.x_mat.x /= mir_scale; data.x_mat.y /= mir_scale;
+	data.y_mat.x /= mir_scale; data.y_mat.y /= mir_scale;
 
 	data.normal.Set(0, 0, (viewz > h) ? +1 : -1);
 
@@ -3255,9 +3384,14 @@ static void RGL_DrawPlane(drawfloor_t *dfloor, float h,
 	data.blending = blending;
 	data.trans = trans;
 	data.slope = slope;
-
-	R_ColorMapUpdate(cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
-
+	
+		if (surf->image->liquid_type == LIQ_Thick)
+		thick_liquid = true;
+			else
+		thick_liquid = false;
+	if (surf->image->liquid_type > LIQ_None && swirling_flats > SWIRL_SMMU)
+		swirl_pass = 1;
+		
 	int lit_adjust = 0;
 	if (face_dir > 0)
 	{
@@ -3276,10 +3410,25 @@ static void RGL_DrawPlane(drawfloor_t *dfloor, float h,
 
 	abstract_shader_c *cmap_shader = R_GetColormapShader(props, lit_adjust);
 
+	R_ColorMapUpdate(cmap_shader, cur_sub->sector->lightcolor, cur_sub->sector->desaturation);
+
 	cmap_shader->WorldMix(GL_POLYGON, data.v_count, data.tex_id,
 			trans, &data.pass, data.blending, false /* masked */,
 			&data, PlaneCoordFunc);
 
+if (surf->image->liquid_type > LIQ_None && swirling_flats == SWIRL_PARALLAX) // Kept as an example for future effects
+	{
+		data.tx0 = surf->offset.x + 25;
+		data.ty0 = surf->offset.y + 25;
+		swirl_pass = 2;
+		data.blending = BL_Masked | BL_Alpha;
+		data.trans = 0.33f;
+		trans = 0.33f;
+		cmap_shader->WorldMix(GL_POLYGON, data.v_count, data.tex_id,
+					trans, &data.pass, data.blending, false,
+					&data, PlaneCoordFunc);
+	}
+	
 	if (use_dlights && ren_extralight < 250)
 	{
 		P_DynamicLightIterator(v_bbox[BOXLEFT],  v_bbox[BOXBOTTOM], h,
@@ -3291,7 +3440,7 @@ static void RGL_DrawPlane(drawfloor_t *dfloor, float h,
 				             v_bbox[BOXRIGHT], v_bbox[BOXTOP],    h,
 							 GLOWLIT_Plane, &data);
 	}
-
+	swirl_pass = 0;
 
 }
 
@@ -3978,14 +4127,14 @@ static void InitCamera(mobj_t *mo, bool full_height, float expand_w)
 	pcman = cameraman::Update(&cman);
 
 	int t_fov = mo->player ? mo->player->telept_fov : 0;
-	float fov = pcman == NULL ? CLAMP(5, r_fov.f + t_fov, 175) : pcman->fov;
+	float fov = pcman == NULL ? CLAMP(5, r_fov + t_fov, 175) : pcman->fov;
 
 	if (splitscreen_mode)
 		fov = fov / 1.5;
 
 	view_x_slope = tan(fov * M_PI / 360.0);
 
-	view_y_slope = ((full_height) ? DOOM_YSLOPE_FULL : DOOM_YSLOPE) * ((r_stretchworld.d == 1) ? 1.2 : 1.0);
+	view_y_slope = ((full_height) ? DOOM_YSLOPE_FULL : DOOM_YSLOPE) * ((r_stretchworld == 1) ? 1.2 : 1.0);
 
 	viewiszoomed = false;
 

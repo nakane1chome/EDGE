@@ -45,8 +45,8 @@
 
 #define PREMULTIPLY 1
  
-#ifdef __arm__
-#include "SSE2NEON.h"
+#if defined (__arm__) || defined (__aarch64__)
+#include "sse2neon.h"
 #else
 #include <xmmintrin.h>
 #endif

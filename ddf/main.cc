@@ -21,7 +21,6 @@
 #include <limits.h>
 #include <vector>
 
-#include "../epi/math_angle.h"
 #include "../epi/path.h"
 #include "../epi/str_format.h"
 
@@ -29,13 +28,12 @@
 
 #include "../src/p_action.h"
 
+
 // FIXME: unwanted link to engine code (switch to epi::angle_c)
 extern float M_Tan(angle_t ang)  GCCATTR((const));
 
-// FIXME: CA: Trying to use angle_c via EPI::
-//float M_Tan(epi::angle_c *ang)  GCCATTR((const));// = epi::angle_c::ATan
 
-
+#define DEBUG_DDFREAD  0
 
 static int engine_version;
 static std::string ddf_where;
@@ -194,7 +192,7 @@ public:
 	define_c() : name(NULL), value(NULL)
 	{ }
 
-	define_c(char *_name, char *_value) : name(_name), value(_value)
+	define_c(char *_N, char *_V) : name(_N), value(_V)
 	{ }
 
 	~define_c()
@@ -374,7 +372,7 @@ static void *DDF_MainCacheFile(readinfo_t * readinfo)
 	file = fopen(filename.c_str(), "rb");
 	if (file == NULL)
 	{
-		//I_Warning("DDF_MainReadFile: Unable to open: '%s'\n", filename.c_str());
+		I_Warning("DDF_MainReadFile: Unable to open: '%s'\n", filename.c_str());
 		return NULL;
 	}
 
@@ -418,8 +416,7 @@ static void DDF_ParseVersion(const char *bstr, int len)
 		DDF_Error("Badly formed #VERSION directive.\n");
 
 	for (; isspace(*str) && len > 0; str++, len--)
-	{
-	}
+	{ }
 
 	if (len < 4 || !isdigit(str[0]) || str[1] != '.' ||
 		!isdigit(str[2]) || !isdigit(str[3]))
@@ -431,10 +428,10 @@ static void DDF_ParseVersion(const char *bstr, int len)
 		((str[2] - '0') * 10) +
 		(str[3] - '0');
 
-	if (ddf_version < 210)
+	if (ddf_version < 131)
 	{
 		if (ddf_version < 129)
-			DDF_Error("Illegal #VERSION number: (%d) %s\n", ddf_version, str);
+			DDF_WarnError("Illegal #VERSION number: (%d) %s\n", ddf_version, str);
 		if (ddf_version >= 129 && ddf_version < 135 && !M_CheckParm("-v129"))
 			DDF_WarnError("You need to use the -v129 command line arg to use this file\n");
 		if (ddf_version >= 135 && !M_CheckParm("-v135"))
@@ -442,7 +439,7 @@ static void DDF_ParseVersion(const char *bstr, int len)
 	}
 
 	if (ddf_version > engine_version)
-		DDF_Error("This version of EDGE cannot handle this DDF.\n");
+		DDF_WarnError("This version of EDGE might have problems handling this DDF.\n");
 }
 
 //
@@ -859,10 +856,10 @@ bool DDF_MainReadFile(readinfo_t * readinfo)
 			cur_ddf_line_num++;
 
 			// -AJA- 2000/03/21: determine linedata.  Ouch.
-			for (l_len = 0; &memfileptr[l_len] < &memfile[size] &&
-				memfileptr[l_len] != '\n' && memfileptr[l_len] != '\r'; l_len++)
-			{
-			}
+			for (l_len=0; &memfileptr[l_len] < &memfile[size] &&
+					 memfileptr[l_len] != '\n' && memfileptr[l_len] != '\r'; l_len++)
+			{ }
+
 
 			cur_ddf_linedata = std::string(memfileptr, l_len);
 
@@ -886,8 +883,8 @@ bool DDF_MainReadFile(readinfo_t * readinfo)
 				if (!firstgo)
 					DDF_Error("#VERSION cannot be used inside an entry !\n");
 
-				DDF_ParseVersion(memfileptr + 8, l_len - 8);
-
+				//DDF_ParseVersion(memfileptr + 8, l_len - 8);
+				//I_Printf("DDF: #VERSION directive ignored.");
 				memfileptr += l_len;
 				continue;
 			}
@@ -916,7 +913,7 @@ bool DDF_MainReadFile(readinfo_t * readinfo)
 
 		case command_read:
 			if (!token.empty())
-				current_cmd = token.c_str(); //TODO: V811 https://www.viva64.com/en/w/v811/ Decreased performance. Excessive type casting: string -> char * -> string. Consider inspecting the 'token.c_str()' expression. //TODO: V811 https://www.viva64.com/en/w/v811/ Decreased performance. Excessive type casting: string -> char * -> string. Consider inspecting the 'token.c_str()' expression.
+				current_cmd = token.c_str();
 			else
 				current_cmd.clear();
 
@@ -1374,8 +1371,7 @@ void DDF_MainGetPercent(const char *info, void *storage)
 	// check that the string is valid
 	Z_StrNCpy(s, info, 100);
 	for (p = s; isdigit(*p) || *p == '.'; p++)
-	{ /* do nothing */
-	}
+	{ /* do nothing */ }
 
 	// the number must be followed by %
 	if (*p != '%')
@@ -1412,8 +1408,7 @@ void DDF_MainGetPercentAny(const char *info, void *storage)
 	// check that the string is valid
 	Z_StrNCpy(s, info, 100);
 	for (p = s; isdigit(*p) || *p == '.'; p++)
-	{ /* do nothing */
-	}
+	{ /* do nothing */ }
 
 	// the number must be followed by %
 	if (*p != '%')
@@ -1496,14 +1491,14 @@ void DDF_MainGetRGB(const char *info, void *storage)
 		return;
 	}
 
-	if (sscanf(info, " #%2x%2x%2x ", &r, &g, &b) != 3) //TODO: V576 https://www.viva64.com/en/w/v576/ Incorrect format. Consider checking the third actual argument of the 'sscanf' function. A pointer to the unsigned int type is expected. //TODO: V576 https://www.viva64.com/en/w/v576/ Incorrect format. Consider checking the fourth actual argument of the 'sscanf' function. A pointer to the unsigned int type is expected. //TODO: V576 https://www.viva64.com/en/w/v576/ Incorrect format. Consider checking the fifth actual argument of the 'sscanf' function. A pointer to the unsigned int type is expected.
+	if (sscanf(info, " #%2x%2x%2x ", &r, &g, &b) != 3)
 		DDF_Error("Bad RGB colour value: %s\n", info);
 
 	*result = (r << 16) | (g << 8) | b;
 
 	// silently change if matches the "none specified" value
 	if (*result == RGB_NO_VALUE)
-		*result ^= RGB_MAKE(1, 1, 1);
+		*result ^= RGB_MAKE(1,1,1);
 }
 
 //
@@ -1527,7 +1522,7 @@ void DDF_MainGetWhenAppear(const char *info, void *storage)
 
 	bool negate = (info[0] == '!');
 
-	const char *range = strstr(info, "-"); //TODO: V817 https://www.viva64.com/en/w/v817/ It is more efficient to seek '-' character rather than a string.
+	const char *range = strstr(info, "-");
 
 	if (range)
 	{
@@ -1546,24 +1541,24 @@ void DDF_MainGetWhenAppear(const char *info, void *storage)
 	}
 	else
 	{
-		if (strstr(info, "1")) //TODO: V817 https://www.viva64.com/en/w/v817/ It is more efficient to seek '1' character rather than a string.
+		if (strstr(info, "1"))
 			*result = (when_appear_e)(*result | WNAP_SkillLevel1);
 
-		if (strstr(info, "2")) //TODO: V817 https://www.viva64.com/en/w/v817/ It is more efficient to seek '2' character rather than a string.
+		if (strstr(info, "2"))
 			*result = (when_appear_e)(*result | WNAP_SkillLevel2);
 
-		if (strstr(info, "3")) //TODO: V817 https://www.viva64.com/en/w/v817/ It is more efficient to seek '3' character rather than a string.
+		if (strstr(info, "3"))
 			*result = (when_appear_e)(*result | WNAP_SkillLevel3);
 
-		if (strstr(info, "4")) //TODO: V817 https://www.viva64.com/en/w/v817/ It is more efficient to seek '4' character rather than a string.
+		if (strstr(info, "4"))
 			*result = (when_appear_e)(*result | WNAP_SkillLevel4);
 
-		if (strstr(info, "5")) //TODO: V817 https://www.viva64.com/en/w/v817/ It is more efficient to seek '5' character rather than a string.
+		if (strstr(info, "5"))
 			*result = (when_appear_e)(*result | WNAP_SkillLevel5);
 	}
 
 	if (strstr(info, "SP") || strstr(info, "sp"))
-		*result = (when_appear_e)(*result | WNAP_Single);
+		*result = (when_appear_e)(*result| WNAP_Single);
 
 	if (strstr(info, "COOP") || strstr(info, "coop"))
 		*result = (when_appear_e)(*result | WNAP_Coop);
@@ -1716,8 +1711,8 @@ static int FindSpecialFlag(const char *prefix, const char *name,
 }
 
 checkflag_result_e DDF_MainCheckSpecialFlag(const char *name,
-	const specflags_t *flag_set, int *flag_value,
-	bool allow_prefixes, bool allow_user)
+							 const specflags_t *flag_set, int *flag_value, 
+							 bool allow_prefixes, bool allow_user)
 {
 	int index;
 	int negate = 0;
@@ -1725,7 +1720,7 @@ checkflag_result_e DDF_MainCheckSpecialFlag(const char *name,
 
 	// try plain name...
 	index = FindSpecialFlag("", name, flag_set);
-
+  
 	if (allow_prefixes)
 	{
 		// try name with ENABLE_ prefix...
@@ -2126,24 +2121,24 @@ void weakness_info_c::Copy(weakness_info_c &src)
 {
 	height[0] = src.height[0];
 	height[1] = src.height[1];
-	angle[0] = src.angle[0];
-	angle[1] = src.angle[1];
+	angle[0]  = src.angle[0];
+	angle[1]  = src.angle[1];
 
-	classes = src.classes;
-	multiply = src.multiply;
+	classes    = src.classes;
+	multiply   = src.multiply;
 	painchance = src.painchance;
 }
 
 void weakness_info_c::Default()
 {
-	height[0] = PERCENT_MAKE(0);
+	height[0] = PERCENT_MAKE(  0);
 	height[1] = PERCENT_MAKE(100);
 
 	angle[0] = ANG0;
 	angle[1] = ANG_MAX;
 
-	classes = BITSET_EMPTY;
-	multiply = 2.5;
+	classes   = BITSET_EMPTY;
+	multiply  = 2.5;
 	painchance = -1; // disabled
 }
 

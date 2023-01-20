@@ -26,21 +26,19 @@
 #include "../e_main.h"
 #include "../version.h"
 
-#ifdef _MSC_VER
+#ifdef WIN32
 #include <windows.h>
 #include "win32/w32_sysinc.h"
+#ifdef _MSC_VER
 extern int __cdecl I_W32ExceptionHandler(PEXCEPTION_POINTERS ep);
+#endif
 #endif
 
 const char *win32_exe_path = ".";
 
 //#undef HYPERTENSION
 
-static int		dcargc;
-static char*	dcargv[64];
-
-
-#ifdef _MSC_VER
+#ifdef WIN32
 // (C) James Haley (From Eternity Engine)
 // I_TweakConsole 
 //
@@ -124,103 +122,28 @@ fflush(stdout);
 	//_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_CHECK_ALWAYS_DF);
 
 	// Enable leak checking at exit.
-	_CrtSetDbgFlag(_CrtSetDbgFlag(0) | _CRTDBG_LEAK_CHECK_DF);
+	//_CrtSetDbgFlag(_CrtSetDbgFlag(0) | _CRTDBG_LEAK_CHECK_DF);
 
 	// Use this to break at a specific allocation number.
 	//_crtBreakAlloc = 53039;
 #endif  
 #endif // 0
 
-
-
-#ifdef WIN32
+#ifdef _MSC_VER
 	// Run EDGE. it never returns
 	_try
 	{
 		//I_TweakConsole();
-
-		FILE *dcph;
-		int ix;
-
-		printf("Attempting to load settings from preset file...\n");
-
-#ifdef HYPERTENSION
-		dcph = fopen("hod.preset", "r");
-#else
-		dcph = fopen("edge.preset", "r");
-#endif
-
-		if (dcph == NULL)
-		{
-			printf("Error! Couldn't open preset. Using default args.\n\n");
-			fflush(stdout);
-			E_Main(argc, (const char **)argv);
-			//common_main(argc, argv);
-		}
-		else
-		printf("Found Preset:");
-
-		for (ix = 0; ix < 64; ix++)
-		{
-			char temp[256];
-			temp[0] = 0;
-			fgets(temp, 255, dcph);
-			if ((temp[0] == 0) || feof(dcph))
-				break;
-			temp[strlen(temp) - 1] = 0;
-			dcargv[ix] = strdup(temp);
-			I_Printf(" %s", dcargv[ix]);
-		}
-
-		fclose(dcph); //TODO: V1004 https://www.viva64.com/en/w/v1004/ The 'dcph' pointer was used unsafely after it was verified against nullptr. Check lines: 149, 171.
-		dcargc = ix;
-		I_Printf("\n");
-		fflush(stdout);
-
-	E_Main(dcargc, (const char **)dcargv);
+		E_Main(argc, (const char**)argv);
 	}
 	__except (I_W32ExceptionHandler(GetExceptionInformation()))
 	{
 		I_Error("Exception caught in main: see CRASHLOG.TXT for info\n");
 	}
-#endif
-
-#if defined(LINUX) || defined(BSD)
-	try 
+#else
+	try
 	{
-		FILE *dcph;
-		int ix;
-
-		printf("Attempting to load settings from edge.preset...\n");
-
-		dcph = fopen("edge.preset", "r");
-
-		if (dcph == NULL)
-		{
-			printf("Error! Couldn't open preset. Using default args.\n\n");
-			fflush(stdout);
-			E_Main(argc, (const char **)argv);
-			//common_main(argc, argv);
-		}
-		else
-			printf("Found Preset:");
-		for (ix = 0; ix < 64; ix++)
-		{
-			char temp[256];
-			temp[0] = 0;
-			fgets(temp, 255, dcph);
-			if ((temp[0] == 0) || feof(dcph))
-				break;
-			temp[strlen(temp) - 1] = 0;
-			dcargv[ix] = strdup(temp);
-			I_Printf(" %s", dcargv[ix]);
-		}
-		fclose(dcph);
-		dcargc = ix;
-		I_Printf("\n");
-		fflush(stdout);
-
-		E_Main(dcargc, (const char **)dcargv);
+		E_Main(argc, (const char **)argv);
 		//common_main(argc, argv);
 	}
 	catch (int e) 

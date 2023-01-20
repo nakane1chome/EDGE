@@ -23,33 +23,42 @@
 #include "types.h"
 #include "macros.h"
 #include "asserts.h"
-#include "epi/physfs/physfs.h"
+//#include "epi/physfs/physfs.h"
 
-// 
 #endif /*__SYSTEM_SPECIFIC_DEFS__*/
 
 #ifdef LINUX
 #define HAVE_PHYSFS 1
+#include <physfs.h>
 #include "epi_linux.h"
 #endif
 
-#ifdef WIN32
+#if defined(WIN32) || defined(_WIN32) || defined(_WIN64)
 #define HAVE_PHYSFS 1
+#include <physfs.h>
 #include "epi_win32.h"
 #endif
 
-#ifdef MACOSX
+#ifdef __APPLE__
 #define HAVE_PHYSFS 1
+#include <physfs.h>
 #include "epi_macosx.h"
 #endif
 
 #ifdef BSD
 #define HAVE_PHYSFS 1
+#include <physfs.h>
 #include "epi_macosx.h"
 #endif
 
 #ifdef DREAMCAST
 #include "epi_dreamcast.h"
+#endif
+
+#ifdef VITA
+#define HAVE_PHYSFS 1
+#include "epi_linux.h"
+#include "epi_vita.h"
 #endif
 
 

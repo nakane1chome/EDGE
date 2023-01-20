@@ -404,8 +404,14 @@ static void MarkCompletedFrames(void)
 			finish_num++;
 
 			if (rot_count < frame->rots)
+			{
 				I_Warning("Sprite %s:%c is missing rotations (%d of %d).\n",
 					def->name, frame_ch, frame->rots - rot_count, frame->rots);
+
+				//Lobo: try to fix cases where some dumbass used A1 instead of A0
+				if (rot_count == 1)
+					frame->rots = 1;
+			}
 		}
 
 		// remove complete sprites from sprite_map
@@ -575,15 +581,14 @@ bool W_CheckSpritesExist(const state_group_t& group)
 			if (states[i].sprite == SPR_NULL)
 				continue;
 
-			if (sprites[states[i].sprite]->frames != NULL)
-				return true;
+			if (sprites[states[i].sprite]->numframes > 0) // Changed frames to numframes, hope it doesn't break - Dasho
+				return true;	
 
 			// -AJA- only check one per group.  It _should_ check them all,
 			//       however this maintains compatibility.
 			break;
 		}
 	}
-	I_Printf("Checking if Sprites Exist...\n");
 	return false;
 }
 

@@ -23,22 +23,28 @@
 
 #include <stdlib.h>
 
-#include "../epi/file.h"
-#include "../epi/filesystem.h"
+#include "epi/file.h"
+#include "epi/filesystem.h"
 
 #include "../ddf/main.h"
+
+#include "defaults.h"
 
 #include "dm_state.h"
 #include "s_sound.h"
 #include "s_music.h"
+#include "s_mp3.h"
 #include "s_ogg.h"
-#include "s_timid.h"
+#include "s_tsf.h"
 #include "s_opl.h"
+#include "s_xmp.h"
+#include "s_gme.h"
+#include "s_sid.h"
 #include "m_misc.h"
 #include "w_wad.h"
 
 // music slider value
-int mus_volume;
+DEF_CVAR(au_mus_volume, int, "c", CFGDEF_MUSIC_VOLUME);
 
 int var_music_dev;
 
@@ -82,11 +88,11 @@ void S_ChangeMusic(int entrynum, bool loop)
 		return;
 	}
 
-	float volume = slider_to_gain[mus_volume];
+	float volume = slider_to_gain[au_mus_volume];
 
 	if (play->type == MUS_MP3)
 	{
-		I_Warning("S_ChangeMusic: MP3 music no longer supported.\n");
+		music_player = S_PlayMP3Music(play, volume, loop);
 		return;
 	}
 
@@ -103,6 +109,23 @@ void S_ChangeMusic(int entrynum, bool loop)
 		return;
 	}
 
+	if (play->type == MUS_XMP)
+	{
+		music_player = S_PlayXMPMusic(play, volume, loop);
+		return;
+	}
+
+	if (play->type == MUS_GME)
+	{
+		music_player = S_PlayGMEMusic(play, volume, loop);
+		return;
+	}
+
+	if (play->type == MUS_SID)
+	{
+		music_player = S_PlaySIDMusic(play, volume, loop);
+		return;
+	}
 	// open the file or lump, and read it into memory
 	epi::file_c *F;
 
@@ -170,12 +193,47 @@ void S_ChangeMusic(int entrynum, bool loop)
 		return;
 	}
 	
+	if (S_CheckMP3(data, length))
+	{
+		delete F;
+		delete data;
+
+		music_player = S_PlayMP3Music(play, volume, loop);
+		return;
+	}
+
+	if (S_CheckXMP(data, length))
+	{
+		delete F;
+		delete data;
+
+		music_player = S_PlayXMPMusic(play, volume, loop);
+		return;
+	}
+
+	if (S_CheckGME(data, length))
+	{
+		delete F;
+		delete data;
+
+		music_player = S_PlayGMEMusic(play, volume, loop);
+		return;
+	}
+
+	if (S_CheckSID(data, length))
+	{
+		delete F;
+		delete data;
+
+		music_player = S_PlaySIDMusic(play, volume, loop);
+		return;
+	}
 	bool is_mus = (data[0] == 'M' && data[1] == 'U' && data[2] == 'S');
 
 	if (var_music_dev == 0 && is_mus)
 		music_player = I_PlayNativeMusic(data, length, volume, loop);
     else if (var_music_dev == 1)
-        music_player = S_PlayTimidity(data, length, is_mus, volume, loop);
+        music_player = S_PlayTSF(data, length, is_mus, volume, loop);
     else
         music_player = S_PlayOPL(data, length, volume, loop);
 
@@ -305,7 +363,7 @@ void S_MusicTicker(void)
 void S_ChangeMusicVolume(void)
 {
 	if (music_player)
-		music_player->Volume(slider_to_gain[mus_volume]);
+		music_player->Volume(slider_to_gain[au_mus_volume]);
 }
 
 
