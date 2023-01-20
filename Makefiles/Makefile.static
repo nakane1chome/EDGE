@@ -59,8 +59,8 @@ CFLAGS_GLBSP += -DINLINE_G=inline
 
 # SDL
 
-CFLAGS  += $(shell sdl-config --cflags)
-LDFLAGS += $(shell sdl-config --libs)
+CFLAGS  += $(shell sdl2-config --cflags)
+LDFLAGS += $(shell sdl2-config --libs)
 
 
 # FLTK
@@ -274,6 +274,9 @@ EDGE_OBJS= \
 	$(OBJDIR)/edge/unx_system.o
 
 $(OBJDIR)/edge/%.o: src/%.cc
+	$(CXX) $(CFLAGS) -o $@ -c $<
+
+$(OBJDIR)/edge/%.o: src/system/%.cc
 	$(CXX) $(CFLAGS) -o $@ -c $<
 
 
