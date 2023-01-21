@@ -37,7 +37,6 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 project(EDGE
-LANGUAGES CXX
 VERSION 2.1.0
 )
 
@@ -192,6 +191,9 @@ add_subdirectory( ajbsp )
 
 if(MSVC)
 	add_definitions(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
+
+if(MSYS)
+	add_definitions(-DSTRSAFE_NO_DEPRECATE)
 endif()
 
 # Recursive function to place PK3 archive source files into a hierarchy of source file in the IDE
