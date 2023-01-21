@@ -159,7 +159,9 @@ void __inline CLIB_DECL D_(const char *text, ...) { do {} while (0); }
 #define S_ISDIR(x) (((x)&_S_IFDIR) != 0)
 #endif
 #if defined(_WIN32) || defined(__WATCOMC__) /* in win32.c */
+#ifndef USE_LIBXMP_SNPRINTF
 #define USE_LIBXMP_SNPRINTF
+#endif
 /* MSVC 2015+ has C99 compliant snprintf and vsnprintf implementations.
  * If __USE_MINGW_ANSI_STDIO is defined for MinGW (which it is by default),
  * compliant implementations will be used instead of the broken MSVCRT
