@@ -191,6 +191,7 @@ add_subdirectory( ajbsp )
 
 if(MSVC)
 	add_definitions(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
+endif()
 
 if(MSYS)
 	add_definitions(-DSTRSAFE_NO_DEPRECATE)
