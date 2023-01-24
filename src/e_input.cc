@@ -233,12 +233,12 @@ static void UpdateForces1(void)
 
 	// ---Keyboard---
 
-	AddKeyForce(AXIS_TURN, key_right, key_left);
-	AddKeyForce(AXIS_MLOOK, key_lookup, key_lookdown);
-	AddKeyForce(AXIS_FORWARD, key_up, key_down);
+	AddKeyForce(AXIS_TURN, input_options.key_right, input_options.key_left);
+	AddKeyForce(AXIS_MLOOK, input_options.key_lookup, input_options.key_lookdown);
+	AddKeyForce(AXIS_FORWARD, input_options.key_up, input_options.key_down);
 	// -MH- 1998/08/18 Fly down
-	AddKeyForce(AXIS_FLY, key_flyup, key_flydown);
-	AddKeyForce(AXIS_STRAFE, key_straferight, key_strafeleft);
+	AddKeyForce(AXIS_FLY, input_options.key_flyup, input_options.key_flydown);
+	AddKeyForce(AXIS_STRAFE, input_options.key_straferight, input_options.key_strafeleft);
 
 	// ---Joystick---
 

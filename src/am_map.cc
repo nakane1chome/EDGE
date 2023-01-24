@@ -70,6 +70,8 @@ static rgbcol_t am_colors[AM_NUM_COLORS] =
 };
 
 
+int key_map;
+
 // Automap keys
 // Ideally these would be configurable...
 int key_am_up;

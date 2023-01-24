@@ -74,6 +74,7 @@ gameaction_e gameaction = ga_nothing;
 bool paused = false;
 
 int key_pause;
+int key_console;
 
 // for comparative timing purposes
 bool nodrawers;
