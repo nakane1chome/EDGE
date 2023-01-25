@@ -16,14 +16,14 @@
 //
 //----------------------------------------------------------------------------
 
-#include "system\i_defs.h"
+#include "system/i_defs.h"
 
-#include "epi\endianess.h"
-#include "epi\file.h"
-#include "epi\filesystem.h"
-#include "epi\sound_gather.h"
+#include "epi/endianess.h"
+#include "epi/file.h"
+#include "epi/filesystem.h"
+#include "epi/sound_gather.h"
 
-#include "ddf\playlist.h"
+#include "ddf/playlist.h"
 
 #include "s_cache.h"
 #include "s_blit.h"

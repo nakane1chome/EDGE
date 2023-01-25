@@ -19,9 +19,9 @@
 #ifndef __SIDPLAYER_H__
 #define __SIDPLAYER_H__
 
-#include "system\i_defs.h"
+#include "system/i_defs.h"
 
-#include "epi\sound_data.h"
+#include "epi/sound_data.h"
 
 class pl_entry_c;
 
