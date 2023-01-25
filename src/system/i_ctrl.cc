@@ -75,7 +75,8 @@ static int num_joys;
 // Map an SDL joystick to our player
 static int map_joy[MAX_JOYS] = {-1, -1};  // -1 for none
 int joystick_devices[MAX_JOYS];  // choice in menu, 0 for none
-static SDL_Joystick *sdl_joy_infos[MAX_JOYS];
+static SDL_Joystick *sdl_joy_infos[MAX_JOYS] = {0, 0};
+static SDL_JoystickID cur_joys[MAX_JOYS] = {-1, -1};
 
 struct edge_joy_info_s {
   int num_axes;
@@ -398,8 +399,14 @@ void HandleJoystickButtonEvent(SDL_Event * ev)
 {
 	SDL_PumpEvents();
 	// ignore other joysticks;
-	if ((int)ev->jbutton.which != cur_joy-1)
-		return;
+    unsigned int i = 0;
+    for (; i<MAX_JOYS; i++) {
+        if ((int)ev->jbutton.which == cur_joys[i])
+            break;
+    }
+    if (i==MAX_JOYS) {
+        return;
+    }
 
 	event_t event;
 
@@ -591,20 +598,21 @@ void I_ShowJoysticks(void)
 }
 
 
-void I_OpenJoystick(int select_index, struct edge_joy_info_s *edge_joy_info)
+void I_OpenJoystick(int i, int open_joy, struct edge_joy_info_s *edge_joy_info)
 {
-	SYS_ASSERT(1 <= select_index && select_index <= num_joys);
+	SYS_ASSERT(1 <= open_joy && open_joy <= num_joys);
 
-	SDL_Joystick *sdl_joy_info = SDL_JoystickOpen(select_index-1);
+	SDL_JoystickID cur_joy = open_joy - 1;
+	SDL_Joystick *sdl_joy_info = SDL_JoystickOpen(cur_joy);
 	if (! sdl_joy_info)
 	{
-		I_Printf("Unable to open joystick %d (SDL error)\n", select_index);
+		I_Printf("Unable to open joystick %d (SDL error)\n", open_joy);
 		return;
 	}
 
-	cur_joy = select_index;
+    cur_joys[i] = cur_joy;
 
-	const char *name = SDL_JoystickNameForIndex(cur_joy-1);
+	const char *name = SDL_JoystickNameForIndex(cur_joy);
 	if (! name)
 		name = "(UNKNOWN)";
 
@@ -625,7 +633,9 @@ void I_OpenJoystick(int select_index, struct edge_joy_info_s *edge_joy_info)
 
 void I_StartupJoystick(void)
 {
-	cur_joy = 0;
+    for (unsigned int i=0; i<MAX_JOYS; i++) {
+        cur_joys[i] = -1;
+    }
 
 	if (M_CheckParm("-nojoy"))
 	{
@@ -655,7 +665,7 @@ void I_StartupJoystick(void)
 
 	for (int i = 0; i<MAX_JOYS; i++ ){
 	  if (joystick_devices[i] > 0)
-	    I_OpenJoystick(joystick_devices[i], &edge_joy_infos[i]);
+	    I_OpenJoystick(i, joystick_devices[i], &edge_joy_infos[i]);
 	}
 }
 
@@ -663,26 +673,28 @@ void I_StartupJoystick(void)
 void CheckJoystickChanged(int i)
 {
 	int new_joy = joystick_devices[i];
-	SDL_Joystick *sdl_joy_info = sdl_joy_infos[0];
+	SDL_Joystick *sdl_joy_info = sdl_joy_infos[i];
 
-	if (joystick_devices[i] < 0 || joystick_devices[i] > num_joys)
+	if (new_joy < 0 || new_joy > num_joys)
 		new_joy = 0;
 
-	if (new_joy == cur_joy)
+	SDL_JoystickID cur_joy = new_joy - 1;
+
+	if (cur_joy == cur_joys[i])
 		return;
 
 	if (sdl_joy_info)
 	{
 		SDL_JoystickClose(sdl_joy_info);
-		sdl_joy_infos[0] = NULL;
+		sdl_joy_infos[i] = NULL;
 
-		I_Printf("Closed joystick %d\n", cur_joy);
-		cur_joy = 0;
+		I_Printf("Closed joystick %d\n", cur_joys[i]);
+		cur_joys[i] = 0;
 	}
 
 	if (new_joy > 0)
 	{
-		I_OpenJoystick(new_joy, &edge_joy_infos[i]);
+		I_OpenJoystick(i, new_joy, &edge_joy_infos[i]);
 	}
 }
 
