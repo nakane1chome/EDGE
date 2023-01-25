@@ -64,6 +64,8 @@ static int eventtail;
 //
 // Options
 input_options_t input_options;
+int key_console;
+int key_map;
 
 // Export ??
 cvar_c joy_dead;
@@ -80,6 +82,7 @@ int var_mlookspeed;
 int var_forwardspeed;
 int var_sidespeed;
 int var_flyspeed;
+
 
 #define MAXPLMOVE  (forwardmove[1])
 
